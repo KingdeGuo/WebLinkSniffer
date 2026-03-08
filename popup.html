@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网址获取</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <h1>网页链接</h1>
+        
+        <div class="controls">
+            <button id="refreshBtn" class="btn">刷新链接</button>
+            <button id="openAllBtn" class="btn primary">打开本页链接</button>
+        </div>
+        
+        <div class="stats">
+            <span id="totalLinks">0</span> 个链接
+        </div>
+        
+        <div id="linksContainer" class="links-container">
+            <!-- 链接列表将在这里动态生成 -->
+            <div class="empty-state">正在获取链接...</div>
+        </div>
+        
+        <div class="pagination">
+            <button id="prevBtn" class="btn">上一页</button>
+            <span id="pageInfo">第 1 页 / 共 1 页</span>
+            <button id="nextBtn" class="btn">下一页</button>
+        </div>
+        
+        <div class="footer">
+            <label class="checkbox">
+                <input type="checkbox" id="autoOpenCheckbox">
+                <span>自动将已打开的链接移到末尾</span>
+            </label>
+        </div>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>

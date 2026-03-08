@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "网址获取",
+  "version": "1.0",
+  "description": "获取当前网页中的所有超链接，分页展示",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
