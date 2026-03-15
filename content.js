@@ -7,10 +7,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
+// 获取URL的基础部分（去除锚点/hash和查询参数）
+function getBaseUrl(url) {
+    try {
+        const urlObj = new URL(url);
+        // 只返回域名和路径，去除查询参数和锚点
+        return urlObj.origin + urlObj.pathname;
+    } catch (e) {
+        // 如果解析失败，尝试简单的字符串处理
+        let baseUrl = url;
+        // 先去除锚点
+        const hashIndex = baseUrl.indexOf('#');
+        if (hashIndex > -1) {
+            baseUrl = baseUrl.substring(0, hashIndex);
+        }
+        // 再去除查询参数
+        const queryIndex = baseUrl.indexOf('?');
+        if (queryIndex > -1) {
+            baseUrl = baseUrl.substring(0, queryIndex);
+        }
+        return baseUrl;
+    }
+}
+
 // 获取页面中的所有超链接
 function getAllLinks() {
     const links = [];
     const seenUrls = new Set();
+    const baseUrlMap = new Map(); // 用于跟踪基础URL及其对应的链接
     
     // 获取所有 <a> 标签
     const anchorElements = document.querySelectorAll('a[href]');
@@ -24,7 +48,7 @@ function getAllLinks() {
                 return;
             }
             
-            // 去重
+            // 完全相同的URL去重
             if (seenUrls.has(href)) {
                 return;
             }
@@ -52,11 +76,50 @@ function getAllLinks() {
                 title = title.substring(0, 97) + '...';
             }
             
-            links.push({
-                url: href,
-                title: title,
-                element: anchor.outerHTML
-            });
+            // 获取基础URL（不带锚点和查询参数）
+            const baseUrl = getBaseUrl(href);
+            // 检查当前链接是否带有锚点或查询参数
+            const hasHashOrQuery = href !== baseUrl;
+            
+            // 检查是否已经有相同基础URL的链接
+            if (baseUrlMap.has(baseUrl)) {
+                // 已存在相同基础URL的链接
+                const existingLink = baseUrlMap.get(baseUrl);
+                
+                if (hasHashOrQuery) {
+                    // 当前链接带有锚点或查询参数，标记为重复（已点击）
+                    links.push({
+                        url: href,
+                        title: title,
+                        element: anchor.outerHTML,
+                        isDuplicate: true // 标记为重复链接
+                    });
+                } else {
+                    // 当前链接是纯净的基础URL（不带锚点和查询参数）
+                    // 将之前的链接标记为重复
+                    existingLink.isDuplicate = true;
+                    
+                    // 添加当前纯净的链接
+                    const newLink = {
+                        url: href,
+                        title: title,
+                        element: anchor.outerHTML,
+                        isDuplicate: false
+                    };
+                    links.push(newLink);
+                    baseUrlMap.set(baseUrl, newLink);
+                }
+            } else {
+                // 第一次遇到这个基础URL
+                const linkObj = {
+                    url: href,
+                    title: title,
+                    element: anchor.outerHTML,
+                    isDuplicate: false
+                };
+                links.push(linkObj);
+                baseUrlMap.set(baseUrl, linkObj);
+            }
         } catch (error) {
             console.error('处理链接时出错:', error);
         }

@@ -16,7 +16,11 @@
         </div>
         
         <div class="stats">
-            <span id="totalLinks">0</span> 个链接
+            <div class="stats-detail">
+                <span>总计: <span id="totalLinks">0</span></span>
+                <span>新链接: <span id="newLinks">0</span></span>
+                <span>已打开: <span id="openedLinks">0</span></span>
+            </div>
         </div>
         
         <div id="linksContainer" class="links-container">
@@ -31,10 +35,16 @@
         </div>
         
         <div class="footer">
-            <label class="checkbox">
-                <input type="checkbox" id="autoOpenCheckbox">
-                <span>自动将已打开的链接移到末尾</span>
-            </label>
+            <div class="footer-options">
+                <label class="checkbox">
+                    <input type="checkbox" id="autoOpenCheckbox">
+                    <span>自动将已打开的链接移到末尾</span>
+                </label>
+                <label class="checkbox">
+                    <input type="checkbox" id="hideOpenedCheckbox" checked>
+                    <span>隐藏已打开的链接</span>
+                </label>
+            </div>
         </div>
     </div>
     

@@ -5,6 +5,7 @@ class LinkManager {
         this.currentPage = 1;
         this.pageSize = 5;
         this.autoMoveOpened = true;
+        this.hideOpenedLinks = true; // 默认隐藏已打开的链接
         this.retryCount = 0;
         this.maxRetries = 3;
         
@@ -18,12 +19,15 @@ class LinkManager {
     initElements() {
         this.linksContainer = document.getElementById('linksContainer');
         this.totalLinksElement = document.getElementById('totalLinks');
+        this.newLinksElement = document.getElementById('newLinks');
+        this.openedLinksElement = document.getElementById('openedLinks');
         this.pageInfoElement = document.getElementById('pageInfo');
         this.prevBtn = document.getElementById('prevBtn');
         this.nextBtn = document.getElementById('nextBtn');
         this.refreshBtn = document.getElementById('refreshBtn');
         this.openAllBtn = document.getElementById('openAllBtn');
         this.autoOpenCheckbox = document.getElementById('autoOpenCheckbox');
+        this.hideOpenedCheckbox = document.getElementById('hideOpenedCheckbox');
     }
     
     async loadOpenedLinks() {
@@ -34,10 +38,14 @@ class LinkManager {
     }
     
     async loadSettings() {
-        const result = await chrome.storage.local.get('autoMoveOpened');
+        const result = await chrome.storage.local.get(['autoMoveOpened', 'hideOpenedLinks']);
         if (result.autoMoveOpened !== undefined) {
             this.autoMoveOpened = result.autoMoveOpened;
             this.autoOpenCheckbox.checked = this.autoMoveOpened;
+        }
+        if (result.hideOpenedLinks !== undefined) {
+            this.hideOpenedLinks = result.hideOpenedLinks;
+            this.hideOpenedCheckbox.checked = this.hideOpenedLinks;
         }
     }
     
@@ -49,7 +57,8 @@ class LinkManager {
     
     async saveSettings() {
         await chrome.storage.local.set({
-            autoMoveOpened: this.autoMoveOpened
+            autoMoveOpened: this.autoMoveOpened,
+            hideOpenedLinks: this.hideOpenedLinks
         });
     }
     
@@ -64,6 +73,12 @@ class LinkManager {
         this.autoOpenCheckbox.addEventListener('change', (e) => {
             this.autoMoveOpened = e.target.checked;
             this.saveSettings();
+            this.updateUI();
+        });
+        this.hideOpenedCheckbox.addEventListener('change', (e) => {
+            this.hideOpenedLinks = e.target.checked;
+            this.saveSettings();
+            this.updateUI();
         });
     }
     
@@ -91,6 +106,9 @@ class LinkManager {
             if (response && response.links) {
                 this.links = response.links;
                 this.retryCount = 0;
+                
+                // 处理重复链接：将标记为 isDuplicate 的链接自动添加到已打开列表
+                await this.processDuplicateLinks();
                 
                 if (this.links.length === 0) {
                     this.showEmpty();
@@ -177,6 +195,23 @@ class LinkManager {
         this.openAllBtn.disabled = true;
     }
     
+    // 处理重复链接：将标记为 isDuplicate 的链接自动添加到已打开列表
+    async processDuplicateLinks() {
+        let hasNewDuplicates = false;
+        
+        this.links.forEach(link => {
+            if (link.isDuplicate && !this.openedLinks.has(link.url)) {
+                this.openedLinks.add(link.url);
+                hasNewDuplicates = true;
+            }
+        });
+        
+        // 如果有新的重复链接被标记，保存到存储
+        if (hasNewDuplicates) {
+            await this.saveOpenedLinks();
+        }
+    }
+    
     sortLinks() {
         // 将已打开的链接移到末尾
         if (this.autoMoveOpened) {
@@ -190,19 +225,61 @@ class LinkManager {
         }
     }
     
+    // 获取过滤后的链接（根据是否隐藏已打开链接）
+    getFilteredLinks() {
+        if (this.hideOpenedLinks) {
+            return this.links.filter(link => !this.openedLinks.has(link.url));
+        }
+        return this.links;
+    }
+    
+    // 计算统计信息
+    calculateStats() {
+        const totalLinks = this.links.length;
+        let openedCount = 0;
+        
+        this.links.forEach(link => {
+            if (this.openedLinks.has(link.url)) {
+                openedCount++;
+            }
+        });
+        
+        const newLinksCount = totalLinks - openedCount;
+        
+        this.totalLinksElement.textContent = totalLinks;
+        this.newLinksElement.textContent = newLinksCount;
+        this.openedLinksElement.textContent = openedCount;
+    }
+    
     updateUI() {
-        this.totalLinksElement.textContent = this.links.length;
+        this.calculateStats();
         this.renderLinks();
         this.updatePagination();
     }
     
     renderLinks() {
+        const filteredLinks = this.getFilteredLinks();
+        const totalPages = Math.ceil(filteredLinks.length / this.pageSize);
+        
+        // 如果当前页超出范围，调整到最后一页
+        if (this.currentPage > totalPages && totalPages > 0) {
+            this.currentPage = totalPages;
+        }
+        
         const startIndex = (this.currentPage - 1) * this.pageSize;
-        const endIndex = Math.min(startIndex + this.pageSize, this.links.length);
-        const pageLinks = this.links.slice(startIndex, endIndex);
+        const endIndex = Math.min(startIndex + this.pageSize, filteredLinks.length);
+        const pageLinks = filteredLinks.slice(startIndex, endIndex);
         
         if (pageLinks.length === 0) {
-            this.linksContainer.innerHTML = '<div class="empty-state">没有找到链接</div>';
+            if (filteredLinks.length === 0) {
+                if (this.hideOpenedLinks) {
+                    this.linksContainer.innerHTML = '<div class="empty-state">所有链接已打开或已隐藏</div>';
+                } else {
+                    this.linksContainer.innerHTML = '<div class="empty-state">没有找到链接</div>';
+                }
+            } else {
+                this.linksContainer.innerHTML = '<div class="empty-state">没有找到链接</div>';
+            }
             return;
         }
         
@@ -277,18 +354,20 @@ class LinkManager {
     }
     
     updatePagination() {
-        const totalPages = Math.ceil(this.links.length / this.pageSize);
+        const filteredLinks = this.getFilteredLinks();
+        const totalPages = Math.ceil(filteredLinks.length / this.pageSize);
         
         this.pageInfoElement.textContent = `第 ${this.currentPage} 页 / 共 ${totalPages} 页`;
         
         this.prevBtn.disabled = this.currentPage <= 1;
         this.nextBtn.disabled = this.currentPage >= totalPages;
         
-        this.openAllBtn.disabled = this.links.length === 0;
+        this.openAllBtn.disabled = filteredLinks.length === 0;
     }
     
     goToPage(page) {
-        const totalPages = Math.ceil(this.links.length / this.pageSize);
+        const filteredLinks = this.getFilteredLinks();
+        const totalPages = Math.ceil(filteredLinks.length / this.pageSize);
         
         if (page < 1 || page > totalPages) {
             return;
@@ -300,9 +379,10 @@ class LinkManager {
     }
     
     async openCurrentPageLinks() {
+        const filteredLinks = this.getFilteredLinks();
         const startIndex = (this.currentPage - 1) * this.pageSize;
-        const endIndex = Math.min(startIndex + this.pageSize, this.links.length);
-        const pageLinks = this.links.slice(startIndex, endIndex);
+        const endIndex = Math.min(startIndex + this.pageSize, filteredLinks.length);
+        const pageLinks = filteredLinks.slice(startIndex, endIndex);
         
         for (const link of pageLinks) {
             await this.openLink(link.url);

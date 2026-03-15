@@ -96,21 +96,37 @@ h1 {
 }
 
 .stats {
-    text-align: center;
     margin-bottom: 16px;
-    padding: 12px;
+}
+
+.stats-detail {
+    display: flex;
+    justify-content: space-around;
     background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
     border-radius: 12px;
-    font-size: 14px;
-    color: #92400e;
-    font-weight: 600;
+    padding: 12px;
     box-shadow: 0 2px 8px rgba(251, 191, 36, 0.2);
 }
 
-.stats span {
+.stats-detail span {
+    font-size: 14px;
+    color: #92400e;
+    font-weight: 600;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.stats-detail span span {
     font-weight: 700;
     color: #b45309;
     font-size: 18px;
+    background: rgba(255, 255, 255, 0.6);
+    padding: 4px 10px;
+    border-radius: 8px;
+    min-width: 40px;
+    text-align: center;
 }
 
 .links-container {
