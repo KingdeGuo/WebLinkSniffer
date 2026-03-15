@@ -5,7 +5,11 @@
   "description": "获取当前网页中的所有超链接，分页展示",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "popup.html"

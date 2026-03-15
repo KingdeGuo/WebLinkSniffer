@@ -5,6 +5,8 @@ class LinkManager {
         this.currentPage = 1;
         this.pageSize = 5;
         this.autoMoveOpened = true;
+        this.retryCount = 0;
+        this.maxRetries = 3;
         
         this.initElements();
         this.loadOpenedLinks();
@@ -54,7 +56,10 @@ class LinkManager {
     setupEventListeners() {
         this.prevBtn.addEventListener('click', () => this.goToPage(this.currentPage - 1));
         this.nextBtn.addEventListener('click', () => this.goToPage(this.currentPage + 1));
-        this.refreshBtn.addEventListener('click', () => this.fetchLinks());
+        this.refreshBtn.addEventListener('click', () => {
+            this.retryCount = 0;
+            this.fetchLinks();
+        });
         this.openAllBtn.addEventListener('click', () => this.openCurrentPageLinks());
         this.autoOpenCheckbox.addEventListener('change', (e) => {
             this.autoMoveOpened = e.target.checked;
@@ -63,27 +68,113 @@ class LinkManager {
     }
     
     async fetchLinks() {
+        this.showLoading();
+        
         try {
+            // 获取当前活动标签页
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
             
             if (!tab) {
-                this.showError('无法获取当前标签页');
+                this.showError('无法获取当前标签页，请确保您在浏览器中打开了一个页面');
                 return;
             }
             
-            const response = await chrome.tabs.sendMessage(tab.id, { action: 'getLinks' });
+            // 检查页面是否可以访问
+            if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:'))) {
+                this.showError('无法访问浏览器内部页面，请在普通网页上使用此扩展');
+                return;
+            }
+            
+            // 尝试发送消息获取链接
+            const response = await this.sendMessageWithRetry(tab.id, { action: 'getLinks' });
             
             if (response && response.links) {
                 this.links = response.links;
-                this.sortLinks();
-                this.updateUI();
+                this.retryCount = 0;
+                
+                if (this.links.length === 0) {
+                    this.showEmpty();
+                } else {
+                    this.sortLinks();
+                    this.updateUI();
+                }
             } else {
-                this.showError('无法获取链接，请刷新页面后重试');
+                throw new Error('返回的链接数据无效');
             }
         } catch (error) {
             console.error('获取链接失败:', error);
-            this.showError('无法获取链接，请刷新页面后重试');
+            
+            // 如果是连接错误，尝试注入 content script
+            if (this.retryCount < this.maxRetries) {
+                this.retryCount++;
+                console.log(`尝试重新注入 content script (${this.retryCount}/${this.maxRetries})...`);
+                
+                try {
+                    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                    if (tab) {
+                        await this.injectContentScript(tab.id);
+                        // 短暂延迟后重试
+                        setTimeout(() => this.fetchLinks(), 500);
+                        return;
+                    }
+                } catch (injectError) {
+                    console.error('注入 content script 失败:', injectError);
+                }
+            }
+            
+            this.showError(`无法获取链接，请刷新页面后重试<br><small style="color: #9ca3af; display: block; margin-top: 8px;">${error.message || '连接失败'}</small>`);
         }
+    }
+    
+    // 发送消息并设置超时
+    sendMessageWithRetry(tabId, message, timeout = 5000) {
+        return new Promise((resolve, reject) => {
+            const timeoutId = setTimeout(() => {
+                reject(new Error('请求超时'));
+            }, timeout);
+            
+            chrome.tabs.sendMessage(tabId, message, (response) => {
+                clearTimeout(timeoutId);
+                
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message));
+                } else {
+                    resolve(response);
+                }
+            });
+        });
+    }
+    
+    // 注入 content script
+    async injectContentScript(tabId) {
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId: tabId },
+                files: ['content.js']
+            });
+            console.log('Content script 注入成功');
+        } catch (error) {
+            console.error('Content script 注入失败:', error);
+            throw error;
+        }
+    }
+    
+    showLoading() {
+        this.linksContainer.innerHTML = '<div class="loading-state">正在获取链接...</div>';
+        this.totalLinksElement.textContent = '-';
+        this.pageInfoElement.textContent = '加载中...';
+        this.prevBtn.disabled = true;
+        this.nextBtn.disabled = true;
+        this.openAllBtn.disabled = true;
+    }
+    
+    showEmpty() {
+        this.linksContainer.innerHTML = '<div class="empty-state">当前页面没有检测到链接</div>';
+        this.totalLinksElement.textContent = '0';
+        this.pageInfoElement.textContent = '第 1 页 / 共 1 页';
+        this.prevBtn.disabled = true;
+        this.nextBtn.disabled = true;
+        this.openAllBtn.disabled = true;
     }
     
     sortLinks() {
@@ -133,6 +224,7 @@ class LinkManager {
         checkbox.className = 'link-checkbox';
         checkbox.checked = isOpened;
         checkbox.addEventListener('change', (e) => {
+            e.stopPropagation();
             this.toggleLinkOpened(link.url, e.target.checked);
         });
         
@@ -151,6 +243,15 @@ class LinkManager {
         
         contentDiv.appendChild(title);
         contentDiv.appendChild(url);
+        
+        // 点击内容区域打开链接
+        contentDiv.addEventListener('click', () => {
+            this.openLink(link.url);
+            if (!this.openedLinks.has(link.url)) {
+                checkbox.checked = true;
+                this.toggleLinkOpened(link.url, true);
+            }
+        });
         
         div.appendChild(checkbox);
         div.appendChild(contentDiv);
@@ -231,7 +332,7 @@ class LinkManager {
     }
     
     showError(message) {
-        this.linksContainer.innerHTML = `<div class="empty-state">${message}</div>`;
+        this.linksContainer.innerHTML = `<div class="error-state">${message}</div>`;
         this.totalLinksElement.textContent = '0';
         this.pageInfoElement.textContent = '第 1 页 / 共 1 页';
         this.prevBtn.disabled = true;

@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>样式优化预览 - 网址获取插件</title>
+    <link rel="stylesheet" href="popup.css">
+    <style>
+        body {
+            background: #f1f5f9;
+            padding: 40px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 40px;
+        }
+        
+        .preview-container {
+            max-width: 800px;
+            width: 100%;
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        h1 {
+            color: #1e293b;
+            margin-bottom: 8px;
+            font-size: 32px;
+        }
+        
+        .subtitle {
+            color: #64748b;
+            margin-bottom: 32px;
+            font-size: 18px;
+        }
+        
+        .section {
+            margin-bottom: 48px;
+        }
+        
+        .section-title {
+            font-size: 24px;
+            color: #334155;
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        
+        .demo-popup {
+            width: 420px;
+            min-height: 520px;
+            margin: 0 auto;
+            border: 2px dashed #cbd5e1;
+            border-radius: 20px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .demo-popup::before {
+            content: '弹窗预览';
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #3b82f6;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            z-index: 10;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-top: 32px;
+        }
+        
+        .feature-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .feature-icon {
+            font-size: 32px;
+            margin-bottom: 16px;
+        }
+        
+        .feature-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+        
+        .feature-desc {
+            color: #64748b;
+            line-height: 1.6;
+        }
+        
+        .color-scheme {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+        
+        .color-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .color-box {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .color-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #475569;
+        }
+        
+        .color-value {
+            font-size: 11px;
+            color: #94a3b8;
+            font-family: 'SF Mono', monospace;
+        }
+        
+        .improvements {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        .improvement-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .improvement-item::before {
+            content: '✓';
+            color: #10b981;
+            font-weight: bold;
+        }
+        
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'SF Mono', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            overflow-x: auto;
+            margin-top: 16px;
+        }
+        
+        .code-comment {
+            color: #94a3b8;
+        }
+        
+        .code-property {
+            color: #7dd3fc;
+        }
+        
+        .code-value {
+            color: #bbf7d0;
+        }
+    </style>
+</head>
+<body>
+    <div class="preview-container">
+        <h1>网址获取插件 - 样式优化预览</h1>
+        <div class="subtitle">现代化设计系统与用户体验改进</div>
+        
+        <div class="section">
+            <h2 class="section-title">弹窗预览</h2>
+            <div class="demo-popup">
+                <!-- 这里嵌入实际的popup.html内容 -->
+                <iframe src="popup.html" style="width: 100%; height: 520px; border: none;"></iframe>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">主要改进</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎨</div>
+                    <div class="feature-title">现代化配色方案</div>
+                    <div class="feature-desc">采用 Tailwind 风格的现代颜色系统，包含 CSS 变量定义，便于主题维护和一致性。</div>
+                    <div class="color-scheme">
+                        <div class="color-item">
+                            <div class="color-box" style="background: #2563eb;"></div>
+                            <div class="color-name">主色调</div>
+                            <div class="color-value">#2563eb</div>
+                        </div>
+                        <div class="color-item">
+                            <div class="color-box" style="background: #f8fafc;"></div>
+                            <div class="color-name">背景色</div>
+                            <div class="color-value">#f8fafc</div>
+                        </div>
+                        <div class="color-item">
+                            <div class="color-box" style="background: #1e293b;"></div>
+                            <div class="color-name">文字主色</div>
+                            <div class="color-value">#1e293b</div>
+                        </div>
+                        <div class="color-item">
+                            <div class="color-box" style="background: #64748b;"></div>
+                            <div class="color-name">文字次色</div>
+                            <div class="color-value">#64748b</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">✨</div>
+                    <div class="feature-title">视觉层次提升</div>
+                    <div class="feature-desc">
+                        <div class="improvements">
+                            <div class="improvement-item">渐变背景与阴影效果</div>
+                            <div class="improvement-item">卡片式链接设计</div>
+                            <div class="improvement-item">悬停动画与微交互</div>
+                            <div class="improvement-item">加载状态指示器</div>
+                            <div class="improvement-item">自定义滚动条样式</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <div class="feature-title">交互体验优化</div>
+                    <div class="feature-desc">
+                        <div class="improvements">
+                            <div class="improvement-item">按钮悬停与点击反馈</div>
+                            <div class="improvement-item">链接项滑动效果</div>
+                            <div class="improvement-item">分页控件视觉优化</div>
+                            <div class="improvement-item">复选框自定义样式</div>
+                            <div class="improvement-item">响应式布局支持</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">CSS 变量系统</h2>
+            <p>新的样式系统使用 CSS 变量，便于维护和主题切换：</p>
+            <div class="code-block">
+                <span class="code-comment">/* 现代颜色方案 */</span><br>
+                <span class="code-property">--color-primary</span>: <span class="code-value">#2563eb</span>;<br>
+                <span class="code-property">--color-primary-hover</span>: <span class="code-value">#1d4ed8</span>;<br>
+                <span class="code-property">--color-background</span>: <span class="code-value">#f8fafc</span>;<br>
+                <span class="code-property">--color-surface</span>: <span class="code-value">#ffffff</span>;<br>
+                <span class="code-property">--color-border</span>: <span class="code-value">#e2e8f0</span>;<br>
+                <span class="code-property">--color-text-primary</span>: <span class="code-value">#1e293b</span>;<br>
+                <span class="code-comment"><br>/* 阴影系统 */</span><br>
+                <span class="code-property">--shadow-sm</span>: <span class="code-value">0 1px 2px 0 rgba(0, 0, 0, 0.05)</span>;<br>
+                <span class="code-property">--shadow-md</span>: <span class="code-value">0 4px 6px -1px rgba(0, 0, 0, 0.1)</span>;<br>
+                <span class="code-property">--shadow-lg</span>: <span class="code-value">0 10px 15px -3px rgba(0, 0, 0, 0.1)</span>;<br>
+                <span class="code-comment"><br>/* 间距系统 */</span><br>
+                <span class="code-property">--spacing-sm</span>: <span class="code-value">8px</span>;<br>
+                <span class="code-property">--spacing-md</span>: <span class="code-value">16px</span>;<br>
+                <span class="code-property">--spacing-lg</span>: <span class="code-value">24px</span>;<br>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">动画效果</h2>
+            <p>新增的动画效果提升用户体验：</p>
+            <div class="code-block">
+                <span class="code-comment">/* 链接项淡入动画 */</span><br>
+                <span class="code-property">@keyframes</span> <span class="code-value">fadeIn</span> {<br>
+                &nbsp;&nbsp;<span class="code-property">from</span> { <span class="code-property">opacity</span>: <span class="code-value">0</span>; <span class="code-property">transform</span>: <span class="code-value">translateY(10px)</span>; }<br>
+                &nbsp;&nbsp;<span class="code-property">to</span> { <span class="code-property">opacity</span>: <span class="code-value">1</span>; <span class="code-property">transform</span>: <span class="code-value">translateY(0)</span>; }<br>
+                }<br>
+                <br>
+                <span class="code-comment">/* 加载旋转动画 */</span><br>
+                <span class="code-property">@keyframes</span> <span class="code-value">spin</span> {<br>
+                &nbsp;&nbsp;<span class="code-property">to</span> { <span class="code-property">transform</span>: <span class="code-value">rotate(360deg)</span>; }<br>
+                }<br>
+                <br>
+                <span class="code-comment">/* 按钮点击动画 */</span><br>
+                <span class="code-property">@keyframes</span> <span class="code-value">buttonClick</span> {<br>
+                &nbsp;&nbsp;<span class="code-property">0%</span> { <span class="code-property">transform</span>: <span class="code-value">scale(1)</span>; }<br>
+                &nbsp;&nbsp;<span class="code-property">50%</span> { <span class="code-property">transform</span>: <span class="code-value">scale(0.98)</span>; }<br>
+                &nbsp;&nbsp;<span class="code-property">100%</span> { <span class="code-property">transform</span>: <span class="code-value">scale(1)</span>; }<br>
+                }
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">响应式设计</h2>
+            <p>针对小屏幕设备的优化：</p>
+            <div class="code-block">
+                <span class="code-comment">/* 响应式调整 */</span><br>
+                <span class="code-property">@media</span> (<span class="code-property">max-width</span>: <span class="code-value">480px</span>) {<br>
+                &nbsp;&nbsp;<span class="code-property">body</span> {<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-property">width</span>: <span class="code-value">100%</span>;<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-property">min-height</span>: <span class="code-value">100vh</span>;<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-property">padding</span>: <span class="code-value">8px</span>;<br>
+                &nbsp;&nbsp;}<br>
+                &nbsp;&nbsp;<span class="code-property">.container</span> {<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-property">padding</span>: <span class="code-value">var(--spacing-md)</span>;<br>
+                &nbsp;&nbsp;}<br>
+                &nbsp;&nbsp;<span class="code-property">.controls</span> {<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-property">flex-direction</span>: <span class="code-value">column</span>;<br>
+                &nbsp;&nbsp;}<br>
+                &nbsp;&nbsp;<span class="code-property">.links-container</span> {<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-property">max-height</span>: <span class="code-value">400px</span>;<br>
+                &nbsp;&nbsp;}<br>
+                }
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 添加一些交互效果
+        document.addEventListener('DOMContentLoaded', function() {
+            // 为功能卡片添加点击效果
+            const featureCards = document.querySelectorAll('.feature-card');
+            featureCards.forEach(card => {
+                card.addEventListener('click', function() {
+                    this.style.transform = 'scale(0.98)';
+                    setTimeout(() => {
+                        this.style.transform = '';
+                    }, 150);
+                });
+            });
+            
+            // 更新预览时间
+            const updateTime = () => {
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString('zh-CN', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+                const dateStr = now.toLocaleDateString('zh-CN', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+                document.querySelector('.subtitle').innerHTML = 
+                    `现代化设计系统与用户体验改进<br><small>最后更新: ${dateStr} ${timeStr}</small>`;
+            };
+            
+            updateTime();
+            setInterval(updateTime, 1000);
+        });
+    </script>
+</body>
+</html>
