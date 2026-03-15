@@ -8,12 +8,30 @@ class LinkManager {
         this.hideOpenedLinks = true; // 默认隐藏已打开的链接
         this.retryCount = 0;
         this.maxRetries = 3;
+        this.isInitialized = false;
         
         this.initElements();
-        this.loadOpenedLinks();
-        this.loadSettings();
-        this.setupEventListeners();
-        this.fetchLinks();
+        this.initializeApp();
+    }
+    
+    // 初始化应用，确保数据加载完成后再执行其他操作
+    async initializeApp() {
+        try {
+            // 并行加载所有必要的数据
+            await Promise.all([
+                this.loadOpenedLinks(),
+                this.loadSettings()
+            ]);
+            
+            this.setupEventListeners();
+            this.isInitialized = true;
+            
+            // 数据加载完成后才获取链接
+            await this.fetchLinks();
+        } catch (error) {
+            console.error('初始化应用失败:', error);
+            this.showError('初始化失败，请刷新页面重试');
+        }
     }
     
     initElements() {
@@ -31,35 +49,85 @@ class LinkManager {
     }
     
     async loadOpenedLinks() {
-        const result = await chrome.storage.local.get('openedLinks');
-        if (result.openedLinks) {
-            this.openedLinks = new Set(result.openedLinks);
+        try {
+            const result = await chrome.storage.local.get('openedLinks');
+            if (result.openedLinks && Array.isArray(result.openedLinks)) {
+                // 过滤掉无效的URL
+                const validUrls = result.openedLinks.filter(url => 
+                    url && typeof url === 'string' && url.trim().length > 0
+                );
+                this.openedLinks = new Set(validUrls);
+                console.log(`已加载 ${validUrls.length} 个已打开链接`);
+            } else {
+                console.log('没有找到已保存的链接记录');
+            }
+        } catch (error) {
+            console.error('加载已打开链接失败:', error);
+            this.openedLinks = new Set();
         }
     }
     
     async loadSettings() {
-        const result = await chrome.storage.local.get(['autoMoveOpened', 'hideOpenedLinks']);
-        if (result.autoMoveOpened !== undefined) {
-            this.autoMoveOpened = result.autoMoveOpened;
-            this.autoOpenCheckbox.checked = this.autoMoveOpened;
-        }
-        if (result.hideOpenedLinks !== undefined) {
-            this.hideOpenedLinks = result.hideOpenedLinks;
-            this.hideOpenedCheckbox.checked = this.hideOpenedLinks;
+        try {
+            const result = await chrome.storage.local.get(['autoMoveOpened', 'hideOpenedLinks']);
+            if (result.autoMoveOpened !== undefined) {
+                this.autoMoveOpened = result.autoMoveOpened;
+                this.autoOpenCheckbox.checked = this.autoMoveOpened;
+            }
+            if (result.hideOpenedLinks !== undefined) {
+                this.hideOpenedLinks = result.hideOpenedLinks;
+                this.hideOpenedCheckbox.checked = this.hideOpenedLinks;
+            }
+            console.log('设置加载完成');
+        } catch (error) {
+            console.error('加载设置失败:', error);
         }
     }
     
     async saveOpenedLinks() {
-        await chrome.storage.local.set({
-            openedLinks: Array.from(this.openedLinks)
-        });
+        try {
+            const linksArray = Array.from(this.openedLinks);
+            await chrome.storage.local.set({
+                openedLinks: linksArray
+            });
+            console.log(`已保存 ${linksArray.length} 个已打开链接`);
+        } catch (error) {
+            console.error('保存已打开链接失败:', error);
+            // 尝试使用更简单的保存方式
+            try {
+                await chrome.storage.local.set({
+                    openedLinks: Array.from(this.openedLinks)
+                });
+            } catch (fallbackError) {
+                console.error('备用保存方式也失败:', fallbackError);
+            }
+        }
     }
     
     async saveSettings() {
-        await chrome.storage.local.set({
-            autoMoveOpened: this.autoMoveOpened,
-            hideOpenedLinks: this.hideOpenedLinks
-        });
+        try {
+            await chrome.storage.local.set({
+                autoMoveOpened: this.autoMoveOpened,
+                hideOpenedLinks: this.hideOpenedLinks
+            });
+            console.log('设置已保存');
+        } catch (error) {
+            console.error('保存设置失败:', error);
+        }
+    }
+    
+    // 批量保存，提高性能
+    async batchSaveOpenedLinks(urlsToAdd = [], urlsToRemove = []) {
+        try {
+            // 更新本地集合
+            urlsToAdd.forEach(url => this.openedLinks.add(url));
+            urlsToRemove.forEach(url => this.openedLinks.delete(url));
+            
+            // 保存到存储
+            await this.saveOpenedLinks();
+        } catch (error) {
+            console.error('批量保存失败:', error);
+        }
     }
     
     setupEventListeners() {
@@ -384,22 +452,45 @@ class LinkManager {
         const endIndex = Math.min(startIndex + this.pageSize, filteredLinks.length);
         const pageLinks = filteredLinks.slice(startIndex, endIndex);
         
-        for (const link of pageLinks) {
-            await this.openLink(link.url);
+        // 收集要打开的链接URL
+        const urlsToOpen = pageLinks.map(link => link.url);
+        
+        // 批量打开链接
+        for (const url of urlsToOpen) {
+            await this.openLink(url);
         }
         
-        // 标记所有链接为已打开
-        pageLinks.forEach(link => {
-            this.openedLinks.add(link.url);
-        });
-        
-        await this.saveOpenedLinks();
+        // 批量标记所有链接为已打开
+        await this.batchSaveOpenedLinks(urlsToOpen, []);
         
         if (this.autoMoveOpened) {
             this.sortLinks();
             this.updateUI();
         } else {
             this.renderLinks();
+        }
+    }
+    
+    // 清理无效的存储数据
+    async cleanupStorage() {
+        try {
+            const result = await chrome.storage.local.get('openedLinks');
+            if (result.openedLinks && Array.isArray(result.openedLinks)) {
+                // 过滤掉无效的URL
+                const validUrls = result.openedLinks.filter(url => 
+                    url && typeof url === 'string' && url.trim().length > 0
+                );
+                
+                // 如果过滤后的数量不同，则更新存储
+                if (validUrls.length !== result.openedLinks.length) {
+                    await chrome.storage.local.set({
+                        openedLinks: validUrls
+                    });
+                    console.log(`清理存储：从 ${result.openedLinks.length} 个链接中移除了 ${result.openedLinks.length - validUrls.length} 个无效链接`);
+                }
+            }
+        } catch (error) {
+            console.error('清理存储失败:', error);
         }
     }
     
