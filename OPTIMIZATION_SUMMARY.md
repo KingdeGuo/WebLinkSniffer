@@ -154,9 +154,99 @@ async cleanupStorage() {
 3. 如果清除浏览器数据，已保存的链接记录也会被清除
 4. 建议定期使用插件的刷新功能更新链接列表
 
-### 8. 未来改进建议
+### 8. 图片资源URL过滤功能（新增）
+
+#### 8.1 功能说明
+添加了智能过滤功能，自动识别并排除图片和媒体资源类的URL链接，避免在链接列表中显示这些资源文件。
+
+#### 8.2 过滤规则
+
+**图片文件扩展名：**
+- `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`, `.svg`, `.webp`
+- `.ico`, `.tiff`, `.tif`, `.avif`, `.heic`, `.heif`
+
+**媒体文件扩展名：**
+- `.mp4`, `.mp3`, `.avi`, `.mov`, `.wmv`, `.flv`, `.webm`
+- `.ogg`, `.wav`, `.m4a`, `.m4v`, `.mkv`, `.3gp`
+
+**路径模式识别：**
+- `/images/`, `/img/`, `/photos/`, `/pictures/`
+- `/thumbnails/`, `/thumb/`, `/media/`, `/assets/`
+- `/uploads/`, `/static/`, `/resources/`
+
+#### 8.3 实现代码
+```javascript
+// 检查URL是否是图片或媒体资源
+function isMediaResource(url) {
+    try {
+        const urlLower = url.toLowerCase();
+        
+        // 常见图片扩展名
+        const imageExtensions = [
+            '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp', 
+            '.ico', '.tiff', '.tif', '.avif', '.heic', '.heif'
+        ];
+        
+        // 常见媒体资源扩展名（视频、音频等）
+        const mediaExtensions = [
+            '.mp4', '.mp3', '.avi', '.mov', '.wmv', '.flv', '.webm',
+            '.ogg', '.wav', '.m4a', '.m4v', '.mkv', '.3gp'
+        ];
+        
+        // 检查是否包含图片或媒体扩展名
+        const allExtensions = [...imageExtensions, ...mediaExtensions];
+        for (const ext of allExtensions) {
+            // 检查URL路径部分是否以扩展名结尾（忽略查询参数）
+            const urlWithoutQuery = urlLower.split('?')[0];
+            if (urlWithoutQuery.endsWith(ext)) {
+                return true;
+            }
+        }
+        
+        // 检查常见的图片/媒体资源路径模式
+        const mediaPatterns = [
+            /\/images?\//i,
+            /\/img\//i,
+            /\/photos?\//i,
+            /\/pictures?\//i,
+            /\/thumbnails?\//i,
+            /\/thumb\//i,
+            /\/media\//i,
+            /\/assets\//i,
+            /\/uploads?\//i,
+            /\/static\//i,
+            /\/resources?\//i
+        ];
+        
+        // 如果URL路径包含媒体相关目录且有图片扩展名
+        for (const pattern of mediaPatterns) {
+            if (pattern.test(url)) {
+                // 进一步检查是否可能是图片文件
+                const urlWithoutQuery = urlLower.split('?')[0];
+                const hasImageExt = imageExtensions.some(ext => urlWithoutQuery.endsWith(ext));
+                if (hasImageExt) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    } catch (e) {
+        return false;
+    }
+}
+```
+
+#### 8.4 使用效果
+- ✓ 减少列表中的噪音数据
+- ✓ 提高用户查找有效链接的效率
+- ✓ 避免误点击打开图片文件
+- ✓ 支持带查询参数的URL判断
+
+### 9. 未来改进建议
 1. 添加导出/导入功能
 2. 支持按域名分组统计
 3. 添加搜索过滤功能
 4. 支持自定义每页显示数量
 5. 添加数据备份到云端功能
+6. 支持自定义过滤规则配置
