@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>测试域名过滤功能</title>
+</head>
+<body>
+    <h1>测试域名过滤功能</h1>
+    
+    <h2>社交媒体链接（应该被过滤）</h2>
+    <ul>
+        <li><a href="https://twitter.com/example">Twitter 链接</a></li>
+        <li><a href="https://x.com/example">X (Twitter) 链接</a></li>
+        <li><a href="https://facebook.com/example">Facebook 链接</a></li>
+        <li><a href="https://instagram.com/example">Instagram 链接</a></li>
+        <li><a href="https://tiktok.com/@example">TikTok 链接</a></li>
+        <li><a href="https://weibo.com/example">微博链接</a></li>
+        <li><a href="https://douyin.com/example">抖音链接</a></li>
+    </ul>
+    
+    <h2>子域名测试（应该被过滤）</h2>
+    <ul>
+        <li><a href="https://api.twitter.com/v1/users">API Twitter 链接</a></li>
+        <li><a href="https://mobile.twitter.com/example">Mobile Twitter 链接</a></li>
+        <li><a href="https://graph.facebook.com/v12.0">Graph Facebook 链接</a></li>
+    </ul>
+    
+    <h2>普通链接（不应该被过滤）</h2>
+    <ul>
+        <li><a href="https://www.google.com">Google</a></li>
+        <li><a href="https://github.com">GitHub</a></li>
+        <li><a href="https://stackoverflow.com">Stack Overflow</a></li>
+        <li><a href="https://www.baidu.com">百度</a></li>
+    </ul>
+    
+    <h2>带#的链接（应该去重）</h2>
+    <ul>
+        <li><a href="https://example.com/page1">页面1</a></li>
+        <li><a href="https://example.com/page1#section1">页面1#章节1</a></li>
+        <li><a href="https://example.com/page1#section2">页面1#章节2</a></li>
+    </ul>
+    
+    <p><strong>测试说明：</strong></p>
+    <ol>
+        <li>默认情况下，社交媒体链接和子域名应该被过滤掉</li>
+        <li>普通链接应该正常显示</li>
+        <li>带#的链接应该只显示一个（不带#的）</li>
+        <li>可以在配置页面中添加或删除过滤域名</li>
+        <li>修改配置后需要刷新此页面才能看到效果</li>
+    </ol>
+    
+    <p><strong>预期结果（默认配置下）：</strong></p>
+    <ul>
+        <li>应该显示：Google、GitHub、Stack Overflow、百度、example.com/page1</li>
+        <li>不应该显示：任何 twitter.com、x.com、facebook.com、instagram.com、tiktok.com、weibo.com、douyin.com 的链接</li>
+    </ul>
+</body>
+</html>
