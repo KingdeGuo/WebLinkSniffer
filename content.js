@@ -1,11 +1,62 @@
 // 监听来自 popup 的消息
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'getLinks') {
-        const links = getAllLinks();
-        sendResponse({ links });
+        getFilteredLinks().then(links => {
+            sendResponse({ links });
+        });
         return true; // 保持消息通道开放以支持异步响应
     }
 });
+
+// 获取过滤后的链接
+async function getFilteredLinks() {
+    const links = getAllLinks();
+    
+    // 获取过滤设置
+    try {
+        const result = await chrome.storage.local.get([
+            'filteredDomains',
+            'enableFilter',
+            'hideFiltered'
+        ]);
+        
+        const filteredDomains = result.filteredDomains || [];
+        const enableFilter = result.enableFilter !== undefined ? result.enableFilter : true;
+        const hideFiltered = result.hideFiltered !== undefined ? result.hideFiltered : true;
+        
+        if (!enableFilter || filteredDomains.length === 0) {
+            return links;
+        }
+        
+        // 过滤链接
+        return links.filter(link => {
+            try {
+                const urlObj = new URL(link.url);
+                const domain = urlObj.hostname.toLowerCase();
+                
+                // 检查域名是否在过滤列表中
+                const isFiltered = filteredDomains.some(filteredDomain => {
+                    // 支持子域名匹配
+                    return domain === filteredDomain || 
+                           domain.endsWith('.' + filteredDomain);
+                });
+                
+                // 如果隐藏被过滤的链接，则不返回被过滤的链接
+                if (hideFiltered && isFiltered) {
+                    return false;
+                }
+                
+                return true;
+            } catch (e) {
+                // URL解析失败，保留链接
+                return true;
+            }
+        });
+    } catch (error) {
+        console.error('获取过滤设置失败:', error);
+        return links;
+    }
+}
 
 // 获取URL的基础部分（去除锚点/hash和查询参数）
 function getBaseUrl(url) {
@@ -148,39 +199,32 @@ function getAllLinks() {
             
             // 检查是否已经有相同基础URL的链接
             if (baseUrlMap.has(baseUrl)) {
-                // 已存在相同基础URL的链接
                 const existingLink = baseUrlMap.get(baseUrl);
                 
-                if (hasHashOrQuery) {
-                    // 当前链接带有锚点或查询参数，标记为重复（已点击）
-                    links.push({
-                        url: href,
-                        title: title,
-                        element: anchor.outerHTML,
-                        isDuplicate: true // 标记为重复链接
-                    });
-                } else {
-                    // 当前链接是纯净的基础URL（不带锚点和查询参数）
-                    // 将之前的链接标记为重复
-                    existingLink.isDuplicate = true;
-                    
-                    // 添加当前纯净的链接
+                // 如果当前链接是纯净的（不带锚点和查询参数），且已存在的链接不纯净，则替换
+                if (!hasHashOrQuery && existingLink.hasHashOrQuery) {
+                    // 替换为当前纯净的链接
                     const newLink = {
                         url: href,
                         title: title,
                         element: anchor.outerHTML,
-                        isDuplicate: false
+                        hasHashOrQuery: false
                     };
-                    links.push(newLink);
+                    // 更新links数组中的对应项
+                    const index = links.findIndex(link => link.url === existingLink.url);
+                    if (index !== -1) {
+                        links[index] = newLink;
+                    }
                     baseUrlMap.set(baseUrl, newLink);
                 }
+                // 否则，忽略当前链接（如果已存在的链接是纯净的，或者当前链接不纯净）
             } else {
                 // 第一次遇到这个基础URL
                 const linkObj = {
                     url: href,
                     title: title,
                     element: anchor.outerHTML,
-                    isDuplicate: false
+                    hasHashOrQuery: hasHashOrQuery
                 };
                 links.push(linkObj);
                 baseUrlMap.set(baseUrl, linkObj);
@@ -190,8 +234,33 @@ function getAllLinks() {
         }
     });
     
+    // 根据用户需求，我们只保留不带#的链接
+    // 但是，如果某个基础URL只有带#的链接，我们也需要保留一个（至少显示一个链接）
+    // 首先，按基础URL分组，检查哪些基础URL有纯净链接
+    const baseUrlGroups = new Map();
+    links.forEach(link => {
+        const baseUrl = getBaseUrl(link.url);
+        if (!baseUrlGroups.has(baseUrl)) {
+            baseUrlGroups.set(baseUrl, []);
+        }
+        baseUrlGroups.get(baseUrl).push(link);
+    });
+    
+    // 对于每个基础URL，优先选择纯净链接；如果只有带#的链接，保留第一个
+    const filteredLinks = [];
+    baseUrlGroups.forEach((groupLinks, baseUrl) => {
+        const pureLinks = groupLinks.filter(link => !link.hasHashOrQuery);
+        if (pureLinks.length > 0) {
+            // 有纯净链接，选择第一个纯净链接
+            filteredLinks.push(pureLinks[0]);
+        } else {
+            // 只有带#的链接，保留第一个
+            filteredLinks.push(groupLinks[0]);
+        }
+    });
+    
     // 按域名分组并排序
-    links.sort((a, b) => {
+    filteredLinks.sort((a, b) => {
         try {
             const urlA = new URL(a.url);
             const urlB = new URL(b.url);
@@ -209,7 +278,7 @@ function getAllLinks() {
         }
     });
     
-    return links;
+    return filteredLinks;
 }
 
 // 页面加载完成后，可以做一些初始化工作

@@ -44,6 +44,7 @@ class LinkManager {
         this.nextBtn = document.getElementById('nextBtn');
         this.refreshBtn = document.getElementById('refreshBtn');
         this.openAllBtn = document.getElementById('openAllBtn');
+        this.optionsBtn = document.getElementById('optionsBtn');
         this.autoOpenCheckbox = document.getElementById('autoOpenCheckbox');
         this.hideOpenedCheckbox = document.getElementById('hideOpenedCheckbox');
     }
@@ -138,6 +139,9 @@ class LinkManager {
             this.fetchLinks();
         });
         this.openAllBtn.addEventListener('click', () => this.openCurrentPageLinks());
+        this.optionsBtn.addEventListener('click', () => {
+            chrome.runtime.openOptionsPage();
+        });
         this.autoOpenCheckbox.addEventListener('change', (e) => {
             this.autoMoveOpened = e.target.checked;
             this.saveSettings();
@@ -174,9 +178,6 @@ class LinkManager {
             if (response && response.links) {
                 this.links = response.links;
                 this.retryCount = 0;
-                
-                // 处理重复链接：将标记为 isDuplicate 的链接自动添加到已打开列表
-                await this.processDuplicateLinks();
                 
                 if (this.links.length === 0) {
                     this.showEmpty();
@@ -263,22 +264,6 @@ class LinkManager {
         this.openAllBtn.disabled = true;
     }
     
-    // 处理重复链接：将标记为 isDuplicate 的链接自动添加到已打开列表
-    async processDuplicateLinks() {
-        let hasNewDuplicates = false;
-        
-        this.links.forEach(link => {
-            if (link.isDuplicate && !this.openedLinks.has(link.url)) {
-                this.openedLinks.add(link.url);
-                hasNewDuplicates = true;
-            }
-        });
-        
-        // 如果有新的重复链接被标记，保存到存储
-        if (hasNewDuplicates) {
-            await this.saveOpenedLinks();
-        }
-    }
     
     sortLinks() {
         // 将已打开的链接移到末尾

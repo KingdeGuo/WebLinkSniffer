@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "网址获取",
-  "version": "1.0",
-  "description": "获取当前网页中的所有超链接，分页展示",
+  "version": "1.1",
+  "description": "获取当前网页中的所有超链接，分页展示，支持域名过滤",
   "permissions": [
     "activeTab",
     "storage",
@@ -13,6 +13,10 @@
   ],
   "action": {
     "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
   },
   "content_scripts": [
     {

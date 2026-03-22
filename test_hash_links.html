@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>测试带#链接去重</title>
+</head>
+<body>
+    <h1>测试带#链接去重功能</h1>
+    
+    <h2>同一页面的不同章节链接（应该只显示一个）</h2>
+    <ul>
+        <li><a href="https://example.com/page1">页面1（纯净链接）</a></li>
+        <li><a href="https://example.com/page1#section1">页面1#章节1</a></li>
+        <li><a href="https://example.com/page1#section2">页面1#章节2</a></li>
+        <li><a href="https://example.com/page1?query=1">页面1?查询参数</a></li>
+    </ul>
+    
+    <h2>另一个页面（应该只显示一个）</h2>
+    <ul>
+        <li><a href="https://example.com/page2#intro">页面2#介绍</a></li>
+        <li><a href="https://example.com/page2">页面2（纯净链接）</a></li>
+        <li><a href="https://example.com/page2?param=value">页面2?参数</a></li>
+    </ul>
+    
+    <h2>只有带#链接的页面（应该保留第一个遇到的）</h2>
+    <ul>
+        <li><a href="https://example.com/page3#only-hash">页面3#只有哈希</a></li>
+        <li><a href="https://example.com/page3#another">页面3#另一个哈希</a></li>
+    </ul>
+    
+    <h2>普通链接（不受影响）</h2>
+    <ul>
+        <li><a href="https://www.google.com">Google</a></li>
+        <li><a href="https://github.com">GitHub</a></li>
+    </ul>
+    
+    <p>预期结果：应该显示以下链接（不带#和查询参数）：</p>
+    <ol>
+        <li>https://example.com/page1</li>
+        <li>https://example.com/page2</li>
+        <li>https://example.com/page3（如果只有带#的链接，则保留第一个遇到的）</li>
+        <li>https://www.google.com</li>
+        <li>https://github.com</li>
+    </ol>
+</body>
+</html>
