@@ -135,7 +135,7 @@ class OptionsManager {
         }
     }
     
-    addDomainToList(domain) {
+    async addDomainToList(domain) {
         // 标准化域名（移除协议和路径）
         const normalizedDomain = this.normalizeDomain(domain);
         
@@ -143,9 +143,21 @@ class OptionsManager {
             this.filteredDomains.push(normalizedDomain);
             this.renderDomainList();
             this.updatePresetTags();
+            await this.saveDomainsToStorage();
             this.showToast(`已添加域名: ${normalizedDomain}`);
         } else {
             this.showToast('域名已存在', true);
+        }
+    }
+    
+    async saveDomainsToStorage() {
+        try {
+            await chrome.storage.local.set({
+                filteredDomains: this.filteredDomains
+            });
+            console.log('域名列表已自动保存');
+        } catch (error) {
+            console.error('自动保存域名列表失败:', error);
         }
     }
     
@@ -169,17 +181,18 @@ class OptionsManager {
         return domainRegex.test(normalized);
     }
     
-    removeDomain(domain) {
+    async removeDomain(domain) {
         const index = this.filteredDomains.indexOf(domain);
         if (index > -1) {
             this.filteredDomains.splice(index, 1);
             this.renderDomainList();
             this.updatePresetTags();
+            await this.saveDomainsToStorage();
             this.showToast(`已移除域名: ${domain}`);
         }
     }
     
-    batchAddDomains() {
+    async batchAddDomains() {
         const input = this.batchInput.value.trim();
         
         if (!input) {
@@ -207,13 +220,14 @@ class OptionsManager {
             this.renderDomainList();
             this.updatePresetTags();
             this.batchInput.value = '';
+            await this.saveDomainsToStorage();
             this.showToast(`已添加 ${addedCount} 个域名`);
         } else {
             this.showToast('没有有效的域名可添加', true);
         }
     }
     
-    clearAllDomains() {
+    async clearAllDomains() {
         if (this.filteredDomains.length === 0) {
             this.showToast('域名列表已为空', true);
             return;
@@ -223,6 +237,7 @@ class OptionsManager {
             this.filteredDomains = [];
             this.renderDomainList();
             this.updatePresetTags();
+            await this.saveDomainsToStorage();
             this.showToast('已清空所有域名');
         }
     }
