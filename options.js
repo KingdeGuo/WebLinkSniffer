@@ -9,12 +9,22 @@ const DEFAULT_FILTERED_DOMAINS = [
     'douyin.com'
 ];
 
+// 默认过滤关键词
+const DEFAULT_FILTERED_KEYWORDS = [
+    '广告',
+    '推广',
+    '赞助'
+];
+
 // 配置管理器
 class OptionsManager {
     constructor() {
         this.filteredDomains = [];
+        this.filteredKeywords = [];
         this.enableFilter = true;
         this.hideFiltered = true;
+        this.enableKeywordFilter = false;
+        this.hideKeywordFiltered = true;
         
         this.initElements();
         this.loadSettings();
@@ -34,25 +44,41 @@ class OptionsManager {
         this.hideFilteredCheckbox = document.getElementById('hideFiltered');
         this.presetDomains = document.getElementById('presetDomains');
         this.toast = document.getElementById('toast');
+        
+        // 关键词过滤相关元素
+        this.keywordList = document.getElementById('keywordList');
+        this.newKeywordInput = document.getElementById('newKeyword');
+        this.addKeywordBtn = document.getElementById('addKeywordBtn');
+        this.enableKeywordFilterCheckbox = document.getElementById('enableKeywordFilter');
+        this.hideKeywordFilteredCheckbox = document.getElementById('hideKeywordFiltered');
     }
     
     async loadSettings() {
         try {
             const result = await chrome.storage.local.get([
                 'filteredDomains',
+                'filteredKeywords',
                 'enableFilter',
-                'hideFiltered'
+                'hideFiltered',
+                'enableKeywordFilter',
+                'hideKeywordFiltered'
             ]);
             
             this.filteredDomains = result.filteredDomains || [...DEFAULT_FILTERED_DOMAINS];
+            this.filteredKeywords = result.filteredKeywords || [...DEFAULT_FILTERED_KEYWORDS];
             this.enableFilter = result.enableFilter !== undefined ? result.enableFilter : true;
             this.hideFiltered = result.hideFiltered !== undefined ? result.hideFiltered : true;
+            this.enableKeywordFilter = result.enableKeywordFilter !== undefined ? result.enableKeywordFilter : false;
+            this.hideKeywordFiltered = result.hideKeywordFiltered !== undefined ? result.hideKeywordFiltered : true;
             
             this.enableFilterCheckbox.checked = this.enableFilter;
             this.hideFilteredCheckbox.checked = this.hideFiltered;
+            this.enableKeywordFilterCheckbox.checked = this.enableKeywordFilter;
+            this.hideKeywordFilteredCheckbox.checked = this.hideKeywordFiltered;
             
             this.renderDomainList();
             this.updatePresetTags();
+            this.renderKeywordList();
             
             console.log('设置加载完成');
         } catch (error) {
@@ -65,8 +91,11 @@ class OptionsManager {
         try {
             await chrome.storage.local.set({
                 filteredDomains: this.filteredDomains,
+                filteredKeywords: this.filteredKeywords,
                 enableFilter: this.enableFilter,
-                hideFiltered: this.hideFiltered
+                hideFiltered: this.hideFiltered,
+                enableKeywordFilter: this.enableKeywordFilter,
+                hideKeywordFiltered: this.hideKeywordFiltered
             });
             
             this.showToast('设置已保存');
@@ -74,6 +103,20 @@ class OptionsManager {
         } catch (error) {
             console.error('保存设置失败:', error);
             this.showToast('保存设置失败', true);
+        }
+    }
+    
+    async saveFilterSettings() {
+        try {
+            await chrome.storage.local.set({
+                enableFilter: this.enableFilter,
+                hideFiltered: this.hideFiltered,
+                enableKeywordFilter: this.enableKeywordFilter,
+                hideKeywordFiltered: this.hideKeywordFiltered
+            });
+            console.log('过滤设置已自动保存');
+        } catch (error) {
+            console.error('自动保存过滤设置失败:', error);
         }
     }
     
@@ -101,12 +144,14 @@ class OptionsManager {
         this.resetBtn.addEventListener('click', () => this.resetToDefault());
         
         // 复选框事件
-        this.enableFilterCheckbox.addEventListener('change', (e) => {
+        this.enableFilterCheckbox.addEventListener('change', async (e) => {
             this.enableFilter = e.target.checked;
+            await this.saveFilterSettings();
         });
         
-        this.hideFilteredCheckbox.addEventListener('change', (e) => {
+        this.hideFilteredCheckbox.addEventListener('change', async (e) => {
             this.hideFiltered = e.target.checked;
+            await this.saveFilterSettings();
         });
         
         // 预设域名标签点击事件
@@ -116,6 +161,25 @@ class OptionsManager {
                 this.addDomainToList(domain);
                 e.target.classList.add('added');
             }
+        });
+        
+        // 关键词过滤相关事件
+        this.addKeywordBtn.addEventListener('click', () => this.addKeyword());
+        
+        this.newKeywordInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.addKeyword();
+            }
+        });
+        
+        this.enableKeywordFilterCheckbox.addEventListener('change', async (e) => {
+            this.enableKeywordFilter = e.target.checked;
+            await this.saveFilterSettings();
+        });
+        
+        this.hideKeywordFilteredCheckbox.addEventListener('change', async (e) => {
+            this.hideKeywordFiltered = e.target.checked;
+            await this.saveFilterSettings();
         });
     }
     
@@ -245,16 +309,85 @@ class OptionsManager {
     resetToDefault() {
         if (confirm('确定要恢复默认设置吗？这将覆盖当前的配置。')) {
             this.filteredDomains = [...DEFAULT_FILTERED_DOMAINS];
+            this.filteredKeywords = [...DEFAULT_FILTERED_KEYWORDS];
             this.enableFilter = true;
             this.hideFiltered = true;
+            this.enableKeywordFilter = false;
+            this.hideKeywordFiltered = true;
             
             this.enableFilterCheckbox.checked = this.enableFilter;
             this.hideFilteredCheckbox.checked = this.hideFiltered;
+            this.enableKeywordFilterCheckbox.checked = this.enableKeywordFilter;
+            this.hideKeywordFilteredCheckbox.checked = this.hideKeywordFiltered;
             
             this.renderDomainList();
             this.updatePresetTags();
+            this.renderKeywordList();
             this.showToast('已恢复默认设置');
         }
+    }
+    
+    addKeyword() {
+        const keyword = this.newKeywordInput.value.trim();
+        
+        if (!keyword) {
+            this.showToast('请输入关键词', true);
+            return;
+        }
+        
+        this.addKeywordToList(keyword);
+        this.newKeywordInput.value = '';
+    }
+    
+    async addKeywordToList(keyword) {
+        if (!this.filteredKeywords.includes(keyword)) {
+            this.filteredKeywords.push(keyword);
+            this.renderKeywordList();
+            await this.saveKeywordsToStorage();
+            this.showToast(`已添加关键词: ${keyword}`);
+        } else {
+            this.showToast('关键词已存在', true);
+        }
+    }
+    
+    async saveKeywordsToStorage() {
+        try {
+            await chrome.storage.local.set({
+                filteredKeywords: this.filteredKeywords
+            });
+            console.log('关键词列表已自动保存');
+        } catch (error) {
+            console.error('自动保存关键词列表失败:', error);
+        }
+    }
+    
+    async removeKeyword(keyword) {
+        const index = this.filteredKeywords.indexOf(keyword);
+        if (index > -1) {
+            this.filteredKeywords.splice(index, 1);
+            this.renderKeywordList();
+            await this.saveKeywordsToStorage();
+            this.showToast(`已移除关键词: ${keyword}`);
+        }
+    }
+    
+    renderKeywordList() {
+        this.keywordList.innerHTML = '';
+        
+        if (this.filteredKeywords.length === 0) {
+            this.keywordList.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">暂无过滤关键词</div>';
+            return;
+        }
+        
+        this.filteredKeywords.forEach(keyword => {
+            const item = document.createElement('div');
+            item.className = 'domain-item';
+            item.innerHTML = `
+                <span>${keyword}</span>
+                <button onclick="optionsManager.removeKeyword('${keyword}')">删除</button>
+            `;
+            this.keywordList.appendChild(item);
+        });
     }
     
     renderDomainList() {

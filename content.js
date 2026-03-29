@@ -16,34 +16,54 @@ async function getFilteredLinks() {
     try {
         const result = await chrome.storage.local.get([
             'filteredDomains',
+            'filteredKeywords',
             'enableFilter',
-            'hideFiltered'
+            'hideFiltered',
+            'enableKeywordFilter',
+            'hideKeywordFiltered'
         ]);
         
         const filteredDomains = result.filteredDomains || [];
+        const filteredKeywords = result.filteredKeywords || [];
         const enableFilter = result.enableFilter !== undefined ? result.enableFilter : true;
         const hideFiltered = result.hideFiltered !== undefined ? result.hideFiltered : true;
-        
-        if (!enableFilter || filteredDomains.length === 0) {
-            return links;
-        }
+        const enableKeywordFilter = result.enableKeywordFilter !== undefined ? result.enableKeywordFilter : false;
+        const hideKeywordFiltered = result.hideKeywordFiltered !== undefined ? result.hideKeywordFiltered : true;
         
         // 过滤链接
         return links.filter(link => {
             try {
-                const urlObj = new URL(link.url);
-                const domain = urlObj.hostname.toLowerCase();
+                // 域名过滤
+                if (enableFilter && filteredDomains.length > 0) {
+                    const urlObj = new URL(link.url);
+                    const domain = urlObj.hostname.toLowerCase();
+                    
+                    // 检查域名是否在过滤列表中
+                    const isDomainFiltered = filteredDomains.some(filteredDomain => {
+                        // 支持子域名匹配
+                        return domain === filteredDomain || 
+                               domain.endsWith('.' + filteredDomain);
+                    });
+                    
+                    // 如果隐藏被过滤的链接，则不返回被过滤的链接
+                    if (hideFiltered && isDomainFiltered) {
+                        return false;
+                    }
+                }
                 
-                // 检查域名是否在过滤列表中
-                const isFiltered = filteredDomains.some(filteredDomain => {
-                    // 支持子域名匹配
-                    return domain === filteredDomain || 
-                           domain.endsWith('.' + filteredDomain);
-                });
-                
-                // 如果隐藏被过滤的链接，则不返回被过滤的链接
-                if (hideFiltered && isFiltered) {
-                    return false;
+                // 关键词过滤
+                if (enableKeywordFilter && filteredKeywords.length > 0) {
+                    const title = (link.title || '').toLowerCase();
+                    
+                    // 检查标题是否包含过滤关键词
+                    const isKeywordFiltered = filteredKeywords.some(keyword => {
+                        return title.includes(keyword.toLowerCase());
+                    });
+                    
+                    // 如果隐藏被过滤的链接，则不返回被过滤的链接
+                    if (hideKeywordFiltered && isKeywordFiltered) {
+                        return false;
+                    }
                 }
                 
                 return true;
