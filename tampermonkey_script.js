@@ -705,7 +705,7 @@
         openCurrentPageLinks() {
             const startIndex = (this.currentPage - 1) * this.pageSize;
             const endIndex = startIndex + this.pageSize;
-            const currentPageLinks = this.getFilteredLinks().slice(startIndex, endIndex);
+            const currentPageLinks = this.getDisplayLinks().slice(startIndex, endIndex);
 
             currentPageLinks.forEach(link => {
                 window.open(link.url, '_blank');
@@ -718,7 +718,7 @@
             GM_setValue('openedLinks', Array.from(this.openedLinks));
         }
 
-        getFilteredLinks() {
+        getDisplayLinks() {
             let links = this.links;
 
             // 应用搜索过滤
@@ -738,7 +738,7 @@
         }
 
         getTotalPages() {
-            const filteredLinks = this.getFilteredLinks();
+            const filteredLinks = this.getDisplayLinks();
             return Math.max(1, Math.ceil(filteredLinks.length / this.pageSize));
         }
 
@@ -762,8 +762,8 @@
             linksContainer.innerHTML = '';
 
             const startIndex = (this.currentPage - 1) * this.pageSize;
-            const endIndex = Math.min(startIndex + this.pageSize, this.getFilteredLinks().length);
-            const pageLinks = this.getFilteredLinks().slice(startIndex, endIndex);
+            const endIndex = Math.min(startIndex + this.pageSize, this.getDisplayLinks().length);
+            const pageLinks = this.getDisplayLinks().slice(startIndex, endIndex);
 
             pageLinks.forEach(link => {
                 const linkItem = document.createElement('div');
