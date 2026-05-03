@@ -14,6 +14,7 @@ class LinkManager {
         this.retryCount = 0;
         this.maxRetries = 3;
         this.isInitialized = false;
+        this.linkHistory = [];
 
         this.initElements();
         this.initializeApp();
@@ -26,7 +27,8 @@ class LinkManager {
                 this.loadSettings(),
                 this.loadFilteredUrls(),
                 this.loadFilteredDomains(),
-                this.loadFilteredPathPatterns()
+                this.loadFilteredPathPatterns(),
+                this.loadLinkHistory()
             ]);
 
             this.setupEventListeners();
@@ -127,6 +129,168 @@ class LinkManager {
             console.error('加载路径模式失败:', error);
             this.filteredPathPatterns = [];
         }
+    }
+
+    async loadLinkHistory() {
+        try {
+            const result = await chrome.storage.local.get('linkHistory');
+            this.linkHistory = result.linkHistory || [];
+        } catch (error) {
+            console.error('加载链接历史失败:', error);
+            this.linkHistory = [];
+        }
+    }
+
+    async saveLinkHistory() {
+        try {
+            if (this.linkHistory.length > 500) {
+                this.linkHistory.sort((a, b) => (b.lastClicked || 0) - (a.lastClicked || 0));
+                this.linkHistory = this.linkHistory.slice(0, 500);
+            }
+            await chrome.storage.local.set({ linkHistory: this.linkHistory });
+        } catch (error) {
+            console.error('保存链接历史失败:', error);
+        }
+    }
+
+    getTopicWords(text) {
+        if (!text) return [];
+        const stopWords = new Set([
+            'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+            'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+            'should', 'may', 'might', 'can', 'shall', 'to', 'of', 'in', 'for',
+            'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through', 'during',
+            'before', 'after', 'above', 'below', 'between', 'and', 'but', 'or',
+            'nor', 'not', 'so', 'yet', 'both', 'either', 'neither', 'each', 'every',
+            'all', 'any', 'few', 'more', 'most', 'other', 'some', 'such', 'only',
+            'own', 'same', 'than', 'too', 'very', 'just', 'this', 'that', 'these',
+            'those', 'it', 'its', 'here', 'there', 'when', 'where', 'why', 'how',
+            'which', 'who', 'whom', 'what', '新', '最新', '的', '了', '在', '是',
+            '我', '有', '和', '就', '不', '人', '都', '一', '一个', '上', '也',
+            '很', '到', '说', '要', '去', '你', '会', '着', '没有', '看', '好',
+            '自己', '这', '他', '她', '它', '们', '那', '些', '什么', '怎么',
+            '如何', '哪个', '为什么', '因为', '所以', '但是', '而且', '或者',
+            '如果', '虽然', '然后', '可以', '应该', '需要', '已经', '还是',
+            '比较', '非常', '真的', '关于', '对于', '你们', '我们', '他们',
+            '进行', '使用', '通过', '以及', '只是', '就是', '更多', '查看',
+            '了解', '阅读', '详情', '点击', '链接', '更多', '更多', '&', '|'
+        ]);
+        return text.toLowerCase()
+            .split(/\W+/)
+            .filter(w => w.length > 1 && !stopWords.has(w))
+            .slice(0, 8);
+    }
+
+    async recordLinkClicked(url, title) {
+        const domain = this.getDomainFromUrl(url) || 'unknown';
+        const topicWords = this.getTopicWords(title || '');
+        const now = Date.now();
+        const today = new Date().toDateString();
+
+        // 查找已有记录
+        const existing = this.linkHistory.find(h => h.url === url);
+        if (existing) {
+            existing.lastClicked = now;
+            existing.clickCount = (existing.clickCount || 0) + 1;
+            if (title && !existing.title) existing.title = title;
+            if (topicWords.length > 0) {
+                existing.topicWords = [...new Set([...(existing.topicWords || []), ...topicWords])].slice(0, 12);
+            }
+            if (existing.lastClickDate === today) {
+                existing.todayCount = (existing.todayCount || 0) + 1;
+            } else {
+                existing.lastClickDate = today;
+                existing.todayCount = 1;
+            }
+        } else {
+            this.linkHistory.push({
+                url,
+                domain,
+                title: title || '',
+                topicWords,
+                firstSeen: now,
+                lastClicked: now,
+                clickCount: 1,
+                lastClickDate: today,
+                todayCount: 1
+            });
+        }
+
+        await this.saveLinkHistory();
+    }
+
+    computeHistoryScore(item, stats) {
+        if (this.linkHistory.length === 0) return 50;
+        let score = 50;
+        const link = item.link;
+        const domain = item.domain;
+        const title = (link.title || '').trim().toLowerCase();
+
+        // 1) 域名亲和力（Medium 式偏好加权）
+        const domainRecords = this.linkHistory.filter(h => h.domain === domain);
+        if (domainRecords.length > 0) {
+            const totalClicks = domainRecords.reduce((sum, r) => sum + (r.clickCount || 0), 0);
+            if (totalClicks >= 5) {
+                score += 15;
+                const days = this.daysSince(domainRecords.reduce((max, r) => Math.max(max, r.lastClicked || 0), 0));
+                if (days > 14) score -= 5;
+            } else if (totalClicks >= 2) {
+                score += 8;
+            }
+        }
+
+        // 2) 主题偏好匹配（TF-IDF 式关键词相似度）
+        if (title && !title.startsWith('http')) {
+            const currentWords = this.getTopicWords(title);
+            const allHistoryWords = new Map();
+            this.linkHistory.forEach(h => {
+                (h.topicWords || []).forEach(w => {
+                    allHistoryWords.set(w, (allHistoryWords.get(w) || 0) + (h.clickCount || 1));
+                });
+            });
+
+            if (allHistoryWords.size > 0 && currentWords.length > 0) {
+                let matchScore = 0;
+                currentWords.forEach(w => {
+                    if (allHistoryWords.has(w)) {
+                        matchScore += Math.min(allHistoryWords.get(w), 5);
+                    }
+                });
+                score += Math.min(matchScore * 2, 18);
+            }
+        }
+
+        // 3) 会话连续性（YouTube 式近因加权）
+        const today = new Date().toDateString();
+        const todayHistory = this.linkHistory.filter(h => h.lastClickDate === today);
+        if (todayHistory.length > 0) {
+            const todayTopicWords = new Set();
+            todayHistory.forEach(h => (h.topicWords || []).forEach(w => todayTopicWords.add(w)));
+            const currentWords = this.getTopicWords(title);
+            const topicOverlap = currentWords.filter(w => todayTopicWords.has(w)).length;
+            if (topicOverlap >= 2) score += 8;
+        }
+
+        // 4) 疲劳惩罚（同域名今天点击过多 → 降权）
+        const todayDomainClicks = this.linkHistory
+            .filter(h => h.domain === domain && h.lastClickDate === today)
+            .reduce((sum, r) => sum + (r.todayCount || 0), 0);
+        if (todayDomainClicks >= 5) {
+            score -= 12;
+        } else if (todayDomainClicks >= 3) {
+            score -= 5;
+        }
+
+        // 5) 全局首次出现加分
+        if (!this.linkHistory.some(h => h.url === link.url)) {
+            score += 6;
+        }
+
+        return Math.max(0, Math.min(score, 100));
+    }
+
+    daysSince(timestamp) {
+        return timestamp ? Math.floor((Date.now() - timestamp) / 86400000) : 999;
     }
 
     async saveOpenedLinks() {
@@ -280,8 +444,9 @@ class LinkManager {
         this.bulkOpenBtn.addEventListener('click', async () => {
             const urls = Array.from(this.selectedUrls);
             if (urls.length === 0) return;
-            for (const url of urls) {
-                await this.openLink(url);
+            const selectedLinks = this.links.filter(l => urls.includes(l.url));
+            for (const link of selectedLinks) {
+                await this.openLink(link.url, link.title);
             }
             await this.batchSaveOpenedLinks(urls, []);
             this.selectedUrls.clear();
@@ -382,49 +547,341 @@ class LinkManager {
         this.openAllBtn.disabled = true;
     }
 
-    // ========== 顶尖智能排序系统 ==========
+    // ========== 多阶段智能排序系统 ==========
 
     sortLinks() {
+        if (this.links.length < 4) {
+            // 链接太少，简单排序即可
+            this.links.sort((a, b) => a.url.localeCompare(b.url));
+            return;
+        }
+
         const stats = this.computeLinkStatistics();
         
-        const scoredLinks = this.links.map(link => ({
-            link,
-            score: this.computeIntelligentScore(link, stats),
-            isOpened: this.openedLinks.has(link.url)
-        }));
+        // 阶段1：增强打分（基础分 + 历史偏好 + 新颖度 三维融合）
+        const scoredLinks = this.links.map(link => {
+            const baseScore = this.computeIntelligentScore(link, stats);
+            const domain = this.getDomainFromUrl(link.url) || 'unknown';
+            const item = { link, baseScore, domain };
 
-        scoredLinks.sort((a, b) => {
-            if (this.autoMoveOpened && a.isOpened !== b.isOpened) {
-                return a.isOpened ? 1 : -1;
-            }
+            const historyScore = this.computeHistoryScore(item, stats);
+            const noveltyScore = this.computeNoveltyScore(link, stats);
 
-            const scoreDiff = b.score - a.score;
-            if (Math.abs(scoreDiff) > 0.1) return scoreDiff;
+            // 最终分 = 页面质量×0.50 + 历史偏好×0.35 + 探索奖励×0.15
+            const compositeScore = baseScore * 0.50 + historyScore * 0.35 + noveltyScore * 0.15;
 
-            return this.fineGrainedCompare(a.link, b.link, stats);
+            return {
+                link,
+                compositeScore,
+                baseScore,
+                noveltyScore,
+                historyScore,
+                isOpened: this.openedLinks.has(link.url),
+                domain,
+                category: null
+            };
         });
 
-        this.links = scoredLinks.map(item => item.link);
-        
+        // 阶段2：三分类（core / interest / explore）
+        scoredLinks.forEach(item => {
+            item.category = this.categorizeLink(item, stats);
+        });
+
+        // 未打开的排前面
+        const unopened = scoredLinks.filter(item => !item.isOpened);
+        let opened = scoredLinks.filter(item => item.isOpened);
+
+        // 阶段3：组内按 compositeScore 降序
+        const sortByScore = (arr) => arr.sort((a, b) => b.compositeScore - a.compositeScore);
+        sortByScore(opened);
+
+        // 阶段4：多样性交错排列（针对未打开链接）
+        const interleaved = this.diversityInterleave(unopened, stats);
+
+        // 阶段5：域名分散（确保相邻项域名不同）
+        const dispersed = this.domainDispersion(interleaved);
+
+        // 阶段6：组内微扰动
+        const finalUnopened = this.microShuffleWithinGroup(dispersed);
+
+        // 已打开的排在最后
+        const finalOrder = [...finalUnopened, ...opened];
+        this.links = finalOrder.map(item => item.link);
+
+        // debug 输出
         if (window.location.hash.includes('debug')) {
-            console.table(scoredLinks.slice(0, 10).map((item, i) => ({
+            console.table(finalOrder.slice(0, 15).map((item, i) => ({
                 rank: i + 1,
-                title: item.link.title?.substring(0, 40),
-                score: item.score.toFixed(2),
-                isOpened: item.isOpened
+                title: (item.link.title || '').substring(0, 40),
+                category: item.category,
+                composite: item.compositeScore.toFixed(1),
+                base: item.baseScore.toFixed(1),
+                novelty: item.noveltyScore.toFixed(1),
+                domain: item.domain,
+                opened: item.isOpened ? '✓' : ''
             })));
         }
+    }
+
+    computeNoveltyScore(link, stats) {
+        let score = 50;
+
+        try {
+            const url = link.url;
+            const domain = new URL(url).hostname;
+            const domainCount = stats.domainCounts.get(domain) || 1;
+            
+            // 罕见域名加分（当前页面内）
+            if (stats.totalDomainTypes > 1) {
+                const rarity = 1 - (domainCount / stats.maxDomainCount);
+                score += rarity * 25;
+            } else {
+                score += 5;
+            }
+
+            // 跨域链接加分（与当前页面不同域名）
+            if (!this.isSameDomain(url)) {
+                score += 18;
+            }
+
+            // 全局首次出现（Google Discover 式新鲜度）
+            if (!this.linkHistory.some(h => h.url === url)) {
+                score += 22;
+            }
+
+            // 域名从未访问过
+            if (!this.linkHistory.some(h => h.domain === domain)) {
+                score += 15;
+            } else {
+                // 至少 30 天没访问 → 轻微探索加分
+                const lastVisit = Math.max(
+                    ...this.linkHistory.filter(h => h.domain === domain).map(h => h.lastClicked || 0)
+                );
+                if (lastVisit && this.daysSince(lastVisit) > 30) {
+                    score += 8;
+                }
+            }
+
+            // 独特标题词汇加分
+            const title = (link.title || '').trim().toLowerCase();
+            if (title && !title.startsWith('http')) {
+                const words = title.split(/\W+/).filter(w => w.length > 1);
+                let uniqueCount = 0;
+                for (const w of words) {
+                    if (stats.uniqueWordsInTitles.has(w)) {
+                        uniqueCount++;
+                    }
+                }
+                const uniqueness = words.length > 0 ? uniqueCount / words.length : 0;
+                score += (1 - uniqueness) * 12;
+            }
+
+            // URL 路径深度新颖性
+            try {
+                const depth = new URL(url).pathname.split('/').filter(Boolean).length;
+                if (stats.avgPathDepth > 0) {
+                    const depthDiff = Math.abs(depth - stats.avgPathDepth);
+                    score += Math.min(depthDiff * 4, 10);
+                }
+            } catch (e) {}
+
+            // 非 HTML 扩展名酌情加分（PDF / Markdown）
+            const pathLower = new URL(url).pathname.toLowerCase();
+            if (/\.(pdf|md|docx?|pptx?|xlsx?|csv)$/i.test(pathLower)) {
+                score += 10;
+            }
+
+        } catch (e) {}
+
+        return Math.max(0, Math.min(score, 100));
+    }
+
+    categorizeLink(item, stats) {
+        const score = item.compositeScore;
+        const base = item.baseScore;
+        const novelty = item.noveltyScore;
+        const link = item.link;
+        const domain = item.domain;
+
+        // 高基础分 + 内容区 + 优质标题 → 核心
+        if (base >= 250 && link.isContentArea &&
+            link.title && link.title.length >= 10 && !link.title.startsWith('http')) {
+            return 'core';
+        }
+
+        // 高基础分但标题一般 → 核心（靠内容区/位置补足）
+        if (base >= 230 && link.isContentArea) {
+            return 'core';
+        }
+
+        // 高新颖度 + 跨域 → 探索
+        if (novelty >= 65 && !this.isSameDomain(link.url)) {
+            return 'explore';
+        }
+
+        // 中等分 + 有标题 → 兴趣
+        if (score >= 200 && link.title && link.title.length >= 5) {
+            return 'interest';
+        }
+
+        // 罕见域名 + 有一定分 → 探索
+        try {
+            const domainCount = stats.domainCounts.get(domain) || 1;
+            if (domainCount <= 2 && score >= 150 && !this.isSameDomain(link.url)) {
+                return 'explore';
+            }
+        } catch (e) {}
+
+        // 剩下的按分数分
+        if (score >= 220) return 'interest';
+        if (score >= 150) return 'explore';
+        return 'interest'; // 默认兴趣
+    }
+
+    diversityInterleave(scoredItems, stats) {
+        if (scoredItems.length === 0) return [];
+
+        // 按分类分桶，桶内按分数降序
+        const buckets = {
+            core: [],
+            interest: [],
+            explore: []
+        };
+
+        scoredItems.forEach(item => {
+            if (buckets[item.category]) {
+                buckets[item.category].push(item);
+            } else {
+                buckets.interest.push(item);
+            }
+        });
+
+        // 桶内按 compositeScore 降序
+        for (const cat of ['core', 'interest', 'explore']) {
+            buckets[cat].sort((a, b) => b.compositeScore - a.compositeScore);
+        }
+
+        // 交错顺序：核心 → 兴趣 → 探索 → 循环
+        const interleaveOrder = ['core', 'interest', 'explore'];
+        const result = [];
+        const indices = { core: 0, interest: 0, explore: 0 };
+        let roundRobinIndex = 0;
+
+        // 前 8 个位置使用严格交错
+        const topCount = Math.min(8, scoredItems.length);
+        for (let i = 0; i < topCount; i++) {
+            const cat = interleaveOrder[roundRobinIndex % 3];
+            if (indices[cat] < buckets[cat].length) {
+                result.push(buckets[cat][indices[cat]]);
+                indices[cat]++;
+            }
+            roundRobinIndex++;
+
+            // 如果当前分类用完了，跳到下一个
+            if (indices[cat] >= buckets[cat].length) {
+                // 找个还有剩余的
+                for (let offset = 1; offset <= 2; offset++) {
+                    const nextCat = interleaveOrder[(roundRobinIndex + offset) % 3];
+                    if (indices[nextCat] < buckets[nextCat].length) {
+                        roundRobinIndex = (roundRobinIndex + offset);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 剩余按分数高低混合
+        const remaining = [];
+        for (const cat of ['core', 'interest', 'explore']) {
+            while (indices[cat] < buckets[cat].length) {
+                remaining.push(buckets[cat][indices[cat]]);
+                indices[cat]++;
+            }
+        }
+        remaining.sort((a, b) => b.compositeScore - a.compositeScore);
+
+        return [...result, ...remaining];
+    }
+
+    domainDispersion(items) {
+        if (items.length <= 2) return items;
+
+        const result = [];
+        const remaining = [...items];
+
+        while (remaining.length > 0) {
+            // 找分数最高且与上一个域名不同的项
+            let bestIndex = 0;
+            const lastDomain = result.length > 0 ? result[result.length - 1].domain : null;
+
+            // 优先选不同域名的
+            let found = false;
+            for (let i = 0; i < remaining.length; i++) {
+                if (remaining[i].domain !== lastDomain || lastDomain === null) {
+                    // 找这个候选中的最高分
+                    if (!found || remaining[i].compositeScore > remaining[bestIndex].compositeScore) {
+                        bestIndex = i;
+                        found = true;
+                    }
+                }
+            }
+
+            // 如果所有剩余项都是同域名，就选最高分
+            if (!found) {
+                bestIndex = 0;
+                for (let i = 1; i < remaining.length; i++) {
+                    if (remaining[i].compositeScore > remaining[bestIndex].compositeScore) {
+                        bestIndex = i;
+                    }
+                }
+            }
+
+            result.push(remaining[bestIndex]);
+            remaining.splice(bestIndex, 1);
+        }
+
+        return result;
+    }
+
+    microShuffleWithinGroup(items) {
+        if (items.length <= 4) return items;
+
+        const result = [...items];
+
+        // 对中间段（跳过前2和后2）做局部随机微调
+        const start = 2;
+        const end = Math.max(result.length - 2, start);
+
+        for (let i = end - 1; i > start; i--) {
+            // 只在同分类或同域名段内微调
+            const swapWindow = Math.min(3, i - start + 1);
+            const j = i - Math.floor(Math.random() * swapWindow);
+
+            if (i !== j && result[i].domain !== result[i - 1]?.domain &&
+                result[j].domain !== (j > 0 ? result[j - 1].domain : null)) {
+                [result[i], result[j]] = [result[j], result[i]];
+            }
+        }
+
+        return result;
     }
 
     computeLinkStatistics() {
         const stats = {
             maxYPosition: 0,
             domainCounts: new Map(),
+            domainList: [],
+            totalDomainTypes: 0,
             pathDepths: [],
+            avgPathDepth: 0,
             contentAreaLinks: 0,
+            contentAreaRatio: 0,
             hasTitleCount: 0,
             avgTitleLength: 0,
-            urlPatterns: new Map()
+            urlPatterns: new Map(),
+            totalLinks: this.links.length,
+            maxDomainCount: 0,
+            uniqueWordsInTitles: new Set()
         };
 
         let totalTitleLength = 0;
@@ -436,7 +893,9 @@ class LinkManager {
 
             try {
                 const domain = new URL(link.url).hostname;
-                stats.domainCounts.set(domain, (stats.domainCounts.get(domain) || 0) + 1);
+                const count = (stats.domainCounts.get(domain) || 0) + 1;
+                stats.domainCounts.set(domain, count);
+                if (count > stats.maxDomainCount) stats.maxDomainCount = count;
             } catch (e) {}
 
             if (link.isContentArea) stats.contentAreaLinks++;
@@ -445,6 +904,9 @@ class LinkManager {
             if (title && !title.startsWith('http')) {
                 stats.hasTitleCount++;
                 totalTitleLength += title.length;
+                title.toLowerCase().split(/\W+/).filter(w => w.length > 1).forEach(w => {
+                    stats.uniqueWordsInTitles.add(w);
+                });
             }
 
             try {
@@ -453,8 +915,14 @@ class LinkManager {
             } catch (e) {}
         });
 
+        stats.domainList = [...stats.domainCounts.entries()].sort((a, b) => b[1] - a[1]);
+        stats.totalDomainTypes = stats.domainCounts.size;
         stats.avgTitleLength = stats.hasTitleCount > 0 ? 
             totalTitleLength / stats.hasTitleCount : 0;
+        stats.avgPathDepth = stats.pathDepths.length > 0 ?
+            stats.pathDepths.reduce((a, b) => a + b, 0) / stats.pathDepths.length : 0;
+        stats.contentAreaRatio = stats.totalLinks > 0 ?
+            stats.contentAreaLinks / stats.totalLinks : 0;
 
         return stats;
     }
@@ -968,7 +1436,7 @@ class LinkManager {
         contentDiv.appendChild(urlEl);
 
         contentDiv.addEventListener('click', () => {
-            this.openLink(link.url);
+            this.openLink(link.url, link.title);
             if (!this.openedLinks.has(link.url)) {
                 this.toggleLinkOpened(link.url, true);
             }
@@ -1100,11 +1568,10 @@ class LinkManager {
         const startIndex = (this.currentPage - 1) * this.pageSize;
         const endIndex = Math.min(startIndex + this.pageSize, filteredLinks.length);
         const pageLinks = filteredLinks.slice(startIndex, endIndex);
-        const urlsToOpen = pageLinks.map(link => link.url);
-        for (const url of urlsToOpen) {
-            await this.openLink(url);
+        for (const link of pageLinks) {
+            await this.openLink(link.url, link.title);
         }
-        await this.batchSaveOpenedLinks(urlsToOpen, []);
+        await this.batchSaveOpenedLinks(pageLinks.map(l => l.url), []);
         if (this.autoMoveOpened) {
             this.sortLinks();
             this.updateUI();
@@ -1113,9 +1580,11 @@ class LinkManager {
         }
     }
 
-    async openLink(url) {
+    async openLink(url, title) {
         try {
             await chrome.tabs.create({ url, active: false });
+            // 异步记录到历史缓存（不阻塞）
+            this.recordLinkClicked(url, title || '');
         } catch (error) {
             console.error('打开链接失败:', error);
         }
