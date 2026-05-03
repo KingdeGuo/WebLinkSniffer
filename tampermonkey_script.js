@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         网址获取增强版
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  获取当前网页中的所有超链接，智能排序、链接去重，分页展示，支持域名过滤、关键词过滤、路径模式过滤，一键屏蔽链接/域名/路径，多选批量操作
 // @author       KingdeGuo
 // @match        *://*/*
@@ -11,6 +11,7 @@
 // @grant        GM_listValues
 // @grant        GM_registerMenuCommand
 // @grant        GM_addStyle
+// @grant        GM_openInTab
 // @run-at       document-end
 // ==/UserScript==
 
@@ -254,10 +255,6 @@
                         parent = parent.parentElement;
                         depth++;
                     }
-                    // 如果遍历到 body 还没找到明确标记，且不在 nav/footer/header 中，可能是内容区
-                    if (depth >= 20 || parent === document.body || parent === document.documentElement) {
-                        // 如果没有明确排除标记，保守判断为非内容区
-                    }
                 } catch (e) {
                     isContentArea = false;
                 }
@@ -446,7 +443,22 @@
         });
     }
 
-    // 创建链接管理器类
+    // 判断是否为移动端
+    function isMobile() {
+        return window.innerWidth <= 768 || 'ontouchstart' in window;
+    }
+
+    // GM_openInTab 封装（自动处理新标签页打开）
+    function openUrlInNewTab(url) {
+        try {
+            GM_openInTab(url, { active: true, insert: true, setParent: true });
+        } catch (e) {
+            // fallback: 用 window.open
+            window.open(url, '_blank');
+        }
+    }
+
+    // ===== 链接管理器类 =====
     class LinkManager {
         constructor() {
             this.links = [];
@@ -481,7 +493,7 @@
                     width: 100%;
                     height: 100%;
                     background: rgba(0,0,0,0.5);
-                    z-index: 10000;
+                    z-index: 2147483647;
                     display: none;
                 }
                 .link-manager-container {
@@ -492,9 +504,9 @@
                     width: 90%;
                     max-width: 800px;
                     background: white;
-                    border-radius: 8px;
+                    border-radius: 12px;
                     padding: 20px;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
                     max-height: 80vh;
                     overflow-y: auto;
                 }
@@ -536,7 +548,7 @@
                 .link-item {
                     padding: 10px;
                     border: 1px solid #eee;
-                    border-radius: 4px;
+                    border-radius: 6px;
                     margin-bottom: 8px;
                     background: #fafafa;
                 }
@@ -566,7 +578,7 @@
                     border: 1px solid #ccc;
                     background: #fff;
                     cursor: pointer;
-                    border-radius: 3px;
+                    border-radius: 4px;
                     font-size: 12px;
                 }
                 .link-btn:hover {
@@ -575,7 +587,7 @@
                 .search-box {
                     padding: 8px;
                     border: 1px solid #ccc;
-                    border-radius: 4px;
+                    border-radius: 6px;
                     width: 200px;
                 }
                 .close-btn {
@@ -585,6 +597,7 @@
                     font-size: 24px;
                     cursor: pointer;
                     color: #999;
+                    z-index: 1;
                 }
                 .close-btn:hover {
                     color: #333;
@@ -595,20 +608,38 @@
                     gap: 5px;
                 }
 
-                /* ===== 移动端适配样式（全面优化 - 手机空间紧凑利用） ===== */
+                /* 下拉拖拽手柄（移动端 Bottom Sheet） */
+                .drag-handle {
+                    display: none;
+                    width: 40px;
+                    height: 4px;
+                    background: #ccc;
+                    border-radius: 2px;
+                    margin: 0 auto 8px auto;
+                }
+
+                /* ===== 移动端适配 - Bottom Sheet 风格 ===== */
                 @media (max-width: 768px) {
+                    #linkManagerModal {
+                        background: rgba(0,0,0,0.4);
+                    }
                     .link-manager-container {
                         position: fixed;
-                        top: 0;
+                        bottom: 0;
                         left: 0;
+                        top: auto;
                         width: 100%;
                         max-width: 100%;
-                        height: 100%;
-                        max-height: 100vh;
+                        height: 85vh;
+                        max-height: 85vh;
                         transform: none;
-                        border-radius: 0;
-                        padding: 12px 10px;
+                        border-radius: 16px 16px 0 0;
+                        padding: 10px 12px 20px;
                         background: #f8f9fa;
+                        box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+                    }
+                    .drag-handle {
+                        display: block;
                     }
                     .link-manager-container h2 {
                         font-size: 16px;
@@ -647,7 +678,7 @@
                         font-size: 12px;
                         white-space: nowrap;
                     }
-                    /* 第二章 controls-bar（复选框 + 刷新按钮）改为行内包裹 */
+                    /* 第二栏 controls-bar（复选框 + 刷新按钮）改为行内包裹 */
                     .controls-bar + .controls-bar {
                         flex-direction: row;
                         flex-wrap: wrap;
@@ -661,7 +692,7 @@
                         margin-bottom: 6px;
                         padding: 6px 8px;
                         background: #fff;
-                        border-radius: 6px;
+                        border-radius: 8px;
                         box-shadow: 0 1px 3px rgba(0,0,0,0.08);
                     }
                     .stats-bar div {
@@ -692,11 +723,12 @@
                         margin-top: 6px;
                     }
                     .link-btn {
-                        padding: 4px 6px;
-                        font-size: 11px;
-                        min-height: 30px;
+                        padding: 6px 6px;
+                        font-size: 12px;
+                        min-height: 34px;
                         flex: none;
                         width: 100%;
+                        border-radius: 6px;
                     }
                     .link-btn.open-link {
                         background: #007cba;
@@ -732,13 +764,6 @@
                         width: 16px;
                         height: 16px;
                     }
-                    #showLinksBtn {
-                        top: 12px;
-                        right: 12px;
-                        width: 40px;
-                        height: 40px;
-                        font-size: 18px;
-                    }
                     /* 底部的 controls-bar（打开全部 + 保存设置）改为两列等宽 */
                     #linksContainer + .controls-bar {
                         display: grid;
@@ -748,16 +773,19 @@
                     }
                     #linksContainer + .controls-bar .pagination-btn {
                         width: 100%;
-                        padding: 8px;
+                        padding: 10px;
                         font-size: 13px;
-                        min-height: 36px;
+                        min-height: 40px;
+                        border-radius: 8px;
                     }
                 }
 
                 /* 小屏手机适配（≤375px，如 iPhone SE） */
                 @media (max-width: 375px) {
                     .link-manager-container {
-                        padding: 8px 6px;
+                        padding: 8px 6px 16px;
+                        height: 90vh;
+                        max-height: 90vh;
                     }
                     .link-manager-container h2 {
                         font-size: 14px;
@@ -778,9 +806,9 @@
                         gap: 3px;
                     }
                     .link-btn {
-                        padding: 3px 4px;
-                        font-size: 10px;
-                        min-height: 26px;
+                        padding: 4px 4px;
+                        font-size: 11px;
+                        min-height: 30px;
                     }
                     .stats-bar {
                         padding: 4px 6px;
@@ -795,13 +823,6 @@
                         font-size: 13px;
                         padding: 4px 6px;
                     }
-                    #showLinksBtn {
-                        width: 36px;
-                        height: 36px;
-                        font-size: 16px;
-                        top: 10px;
-                        right: 10px;
-                    }
                 }
 
                 /* 横屏手机适配 */
@@ -810,6 +831,8 @@
                         padding: 6px 10px;
                         display: flex;
                         flex-direction: column;
+                        height: 95vh;
+                        max-height: 95vh;
                     }
                     .link-manager-container h2 {
                         font-size: 14px;
@@ -841,11 +864,12 @@
                 }
             `);
 
-            // 创建模态框
+            // 创建模态框（Bottom Sheet 结构）
             this.modal = document.createElement('div');
             this.modal.id = 'linkManagerModal';
             this.modal.innerHTML = `
                 <div class="link-manager-container">
+                    <div class="drag-handle"></div>
                     <span class="close-btn">&times;</span>
                     <h2>网址获取管理器</h2>
                     <div class="controls-bar">
@@ -885,15 +909,38 @@
             `;
             document.body.appendChild(this.modal);
 
+            // 点击遮罩层关闭
+            this.modal.addEventListener('click', (e) => {
+                if (e.target === this.modal) {
+                    this.closeModal();
+                }
+            });
+
             // 绑定事件
             this.bindEvents();
+        }
+
+        closeModal() {
+            this.showModal = false;
+            const container = this.modal.querySelector('.link-manager-container');
+            if (isMobile()) {
+                // 底部滑出动画
+                container.style.transform = 'translateY(100%)';
+                container.style.transition = 'transform 0.25s cubic-bezier(0.32, 0.72, 0, 1)';
+                setTimeout(() => {
+                    this.modal.style.display = 'none';
+                    container.style.transform = '';
+                    container.style.transition = '';
+                }, 250);
+            } else {
+                this.modal.style.display = 'none';
+            }
         }
 
         bindEvents() {
             // 关闭按钮
             this.modal.querySelector('.close-btn').addEventListener('click', () => {
-                this.showModal = false;
-                this.modal.style.display = 'none';
+                this.closeModal();
             });
 
             // 上一页
@@ -947,27 +994,67 @@
             document.getElementById('openAllBtn').addEventListener('click', () => {
                 this.openCurrentPageLinks();
             });
+
+            // 移动端：触摸拖拽关闭（下滑手势）
+            const container = this.modal.querySelector('.link-manager-container');
+            let touchStartY = 0;
+            let touchCurrentY = 0;
+            let isSwiping = false;
+
+            container.addEventListener('touchstart', (e) => {
+                // 只在顶部区域触发下滑关闭（前 60px）
+                if (e.touches[0].clientY - container.getBoundingClientRect().top < 60) {
+                    touchStartY = e.touches[0].clientY;
+                    isSwiping = true;
+                }
+            }, { passive: true });
+
+            container.addEventListener('touchmove', (e) => {
+                if (!isSwiping) return;
+                touchCurrentY = e.touches[0].clientY;
+                const delta = touchCurrentY - touchStartY;
+                if (delta > 0) {
+                    container.style.transform = `translateY(${delta}px)`;
+                    container.style.transition = 'none';
+                }
+            }, { passive: true });
+
+            container.addEventListener('touchend', () => {
+                if (!isSwiping) return;
+                isSwiping = false;
+                const delta = touchCurrentY - touchStartY;
+                if (delta > 100) {
+                    // 下滑超过 100px 关闭
+                    this.closeModal();
+                } else {
+                    // 回弹到原始位置
+                    container.style.transform = 'translateY(0)';
+                    container.style.transition = 'transform 0.2s cubic-bezier(0.32, 0.72, 0, 1)';
+                    setTimeout(() => {
+                        container.style.transition = '';
+                    }, 200);
+                }
+            }, { passive: true });
         }
 
-        // 分批打开当前页所有链接，每个链接间隔 350ms 以避免浏览器弹窗拦截
+        // 使用 GM_openInTab 分批打开当前页所有链接（不会被浏览器弹窗拦截）
         openCurrentPageLinks() {
             const startIndex = (this.currentPage - 1) * this.pageSize;
             const endIndex = startIndex + this.pageSize;
             const currentPageLinks = this.getDisplayLinks().slice(startIndex, endIndex);
 
+            // 使用 GM_openInTab 不受浏览器弹窗限制
             currentPageLinks.forEach((link, index) => {
                 setTimeout(() => {
-                    this.openLinkInNewWindow(link.url);
+                    openUrlInNewTab(link.url);
                     this.markAsOpened(link.url);
-                }, index * 350);
+                }, index * 300);
             });
         }
 
-        // 统一的链接打开方法：使用 window.open 在新窗口/标签页中打开，每次延迟 100ms
+        // 使用 GM_openInTab 在新标签页打开链接（浏览器不会拦截）
         openLinkInNewWindow(url) {
-            setTimeout(() => {
-                window.open(url, '_blank');
-            }, 100);
+            openUrlInNewTab(url);
         }
 
         markAsOpened(url) {
@@ -1034,8 +1121,8 @@
                         <button class="link-btn block-link" data-url="${encodeURIComponent(link.url)}">屏蔽</button>
                         <button class="link-btn block-domain" data-url="${encodeURIComponent(link.url)}">屏蔽域名</button>
                         ${this.openedLinks.has(link.url) ? 
-                          '<span style="color: green; font-size: 12px;">已打开</span>' : 
-                          '<span style="color: orange; font-size: 12px;">未打开</span>'}
+                          '<span style="color: green; font-size: 12px; display: flex; align-items: center;">✓ 已打开</span>' : 
+                          '<span style="color: #999; font-size: 12px; display: flex; align-items: center;">未打开</span>'}
                     </div>
                 `;
                 linksContainer.appendChild(linkItem);
@@ -1046,19 +1133,23 @@
         }
 
         bindLinkEvents() {
-            // 打开链接 - 使用 window.open 在新窗口/标签页打开
+            // 打开链接 - 使用 GM_openInTab 在新标签页打开（浏览器不会拦截）
             document.querySelectorAll('.open-link').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const url = decodeURIComponent(e.target.dataset.url);
-                    window.open(url, '_blank');
+                    openUrlInNewTab(url);
                     this.markAsOpened(url);
                     this.render();
-                    // 短暂显示提示
+                    // Toast 提示
                     const toast = document.createElement('div');
                     toast.textContent = '正在打开链接...';
-                    toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1f2937;color:white;padding:8px 16px;border-radius:8px;font-size:13px;z-index:10001;';
+                    toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1f2937;color:white;padding:10px 20px;border-radius:10px;font-size:14px;z-index:2147483647;box-shadow:0 4px 12px rgba(0,0,0,0.2);';
                     document.body.appendChild(toast);
-                    setTimeout(() => toast.remove(), 1500);
+                    setTimeout(() => {
+                        toast.style.opacity = '0';
+                        toast.style.transition = 'opacity 0.3s';
+                        setTimeout(() => toast.remove(), 300);
+                    }, 1200);
                 });
             });
 
@@ -1103,50 +1194,276 @@
         }
     }
 
-    // 创建浮动按钮来触发链接管理器
+    // ===== 可拖拽悬浮按钮（深度移动端优化） =====
     function createFloatingButton() {
+        // 保存/加载位置
+        function savePosition(x, y) {
+            GM_setValue('fabX', x);
+            GM_setValue('fabY', y);
+        }
+        function loadPosition() {
+            return { x: GM_getValue('fabX', null), y: GM_getValue('fabY', null) };
+        }
+
+        // 添加按钮 + 角标样式（使用最高 z-index 避免被遮挡）
         GM_addStyle(`
             #showLinksBtn {
                 position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 9999;
-                background: #007cba;
+                z-index: 2147483647;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 color: white;
                 border: none;
                 border-radius: 50%;
-                width: 50px;
-                height: 50px;
-                font-size: 18px;
-                cursor: pointer;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                width: 52px;
+                height: 52px;
+                cursor: grab;
+                box-shadow: 0 4px 20px rgba(102, 126, 234, 0.5);
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                touch-action: none;
+                user-select: none;
+                -webkit-user-select: none;
+                transition: box-shadow 0.3s, opacity 0.3s, transform 0.2s;
+                opacity: 0.9;
+                padding: 0;
+                outline: none;
+                -webkit-tap-highlight-color: transparent;
             }
-            #showLinksBtn:hover {
-                background: #005a87;
+            #showLinksBtn:hover,
+            #showLinksBtn:focus {
+                opacity: 1;
+                box-shadow: 0 6px 25px rgba(102, 126, 234, 0.6);
+            }
+            #showLinksBtn:active {
+                cursor: grabbing;
+                transform: scale(0.92);
+                opacity: 1;
+            }
+            #showLinksBtn.dragging {
+                transition: none !important;
+                opacity: 1;
+                transform: scale(1.15);
+                box-shadow: 0 10px 35px rgba(102, 126, 234, 0.7);
+            }
+
+            /* 链接数量角标 */
+            #showLinksBtn .badge {
+                position: absolute;
+                top: -4px;
+                right: -4px;
+                min-width: 18px;
+                height: 18px;
+                background: #ff4757;
+                color: white;
+                font-size: 10px;
+                font-weight: bold;
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0 4px;
+                box-shadow: 0 2px 6px rgba(255,71,87,0.4);
+                border: 2px solid white;
+            }
+
+            /* 移动端：稍小一点，右下角偏上位置 */
+            @media (max-width: 768px) {
+                #showLinksBtn {
+                    width: 48px;
+                    height: 48px;
+                    opacity: 0.85;
+                }
+                #showLinksBtn .badge {
+                    min-width: 16px;
+                    height: 16px;
+                    font-size: 9px;
+                    top: -3px;
+                    right: -3px;
+                }
+            }
+
+            /* 极小屏 */
+            @media (max-width: 375px) {
+                #showLinksBtn {
+                    width: 44px;
+                    height: 44px;
+                }
             }
         `);
 
-        const button = document.createElement('button');
-        button.id = 'showLinksBtn';
-        button.textContent = '🔗';
-        button.title = '显示页面链接';
-        document.body.appendChild(button);
+        const btn = document.createElement('button');
+        btn.id = 'showLinksBtn';
+        // 链接图标 SVG + 数量角标
+        btn.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span class="badge" id="linkCountBadge">0</span>`;
+        btn.title = '查看页面链接';
+        document.body.appendChild(btn);
 
+        // 设置初始位置
+        const saved = loadPosition();
+        let posX, posY;
+        if (saved.x !== null && saved.y !== null) {
+            posX = saved.x;
+            posY = saved.y;
+        } else if (isMobile()) {
+            // 移动端：放在屏幕右侧中间偏下，避开顶部浏览器工具栏和底部导航条
+            posX = window.innerWidth - 64;
+            posY = window.innerHeight * 0.65;
+        } else {
+            posX = window.innerWidth - 72;
+            posY = 20;
+        }
+        btn.style.left = posX + 'px';
+        btn.style.top = posY + 'px';
+
+        // 更新链接数量角标
+        function updateBadge() {
+            try {
+                const links = getAllLinks();
+                const badge = document.getElementById('linkCountBadge');
+                if (badge) {
+                    const count = links.length;
+                    badge.textContent = count > 99 ? '99+' : count;
+                    badge.style.display = count > 0 ? 'flex' : 'none';
+                }
+            } catch (e) {
+                // 忽略错误
+            }
+        }
+        // 延迟更新角标（等页面完全加载）
+        setTimeout(updateBadge, 1500);
+        // 页面变化时更新
+        window.addEventListener('popstate', updateBadge);
+        // 每 5 秒检查一次（Ajax 页面）
+        setInterval(updateBadge, 5000);
+
+        // === 拖拽逻辑（同时支持鼠标和触控） ===
+        let isDragging = false;
+        let startX, startY, origX, origY;
+
+        function onDragStart(clientX, clientY) {
+            isDragging = true;
+            startX = clientX;
+            startY = clientY;
+            origX = posX;
+            origY = posY;
+            btn.classList.add('dragging');
+        }
+
+        function onDragMove(clientX, clientY) {
+            if (!isDragging) return;
+            const dx = clientX - startX;
+            const dy = clientY - startY;
+            posX = origX + dx;
+            posY = origY + dy;
+            // 边界限制
+            posX = Math.max(0, Math.min(window.innerWidth - btn.offsetWidth, posX));
+            posY = Math.max(0, Math.min(window.innerHeight - btn.offsetHeight, posY));
+            btn.style.left = posX + 'px';
+            btn.style.top = posY + 'px';
+        }
+
+        function onDragEnd() {
+            if (!isDragging) return;
+            isDragging = false;
+            btn.classList.remove('dragging');
+            // 吸附到最近的边缘（左/右）
+            const snapMargin = 12;
+            if (posX + btn.offsetWidth / 2 < window.innerWidth / 2) {
+                posX = snapMargin;
+            } else {
+                posX = window.innerWidth - btn.offsetWidth - snapMargin;
+            }
+            // 垂直边界保护
+            posX = Math.max(0, Math.min(window.innerWidth - btn.offsetWidth, posX));
+            posY = Math.max(10, Math.min(window.innerHeight - btn.offsetHeight - 10, posY));
+            btn.style.left = posX + 'px';
+            btn.style.top = posY + 'px';
+            savePosition(posX, posY);
+        }
+
+        // 鼠标事件
+        btn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            onDragStart(e.clientX, e.clientY);
+            function onMove(e2) { onDragMove(e2.clientX, e2.clientY); }
+            function onUp() {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                onDragEnd();
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+
+        // 触控事件
+        btn.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            onDragStart(touch.clientX, touch.clientY);
+        }, { passive: true });
+        btn.addEventListener('touchmove', (e) => {
+            const touch = e.touches[0];
+            onDragMove(touch.clientX, touch.clientY);
+        }, { passive: true });
+        btn.addEventListener('touchend', () => {
+            onDragEnd();
+        }, { passive: true });
+
+        // === 点击/触摸打开管理器 ===
         let linkManager = null;
+        // 使用 pointer 事件统一处理 tap（区分点击和拖拽）
+        let isPointerDown = false;
+        let pointerStartX = 0;
+        let pointerStartY = 0;
 
-        button.addEventListener('click', () => {
+        btn.addEventListener('pointerdown', (e) => {
+            isPointerDown = true;
+            pointerStartX = e.clientX;
+            pointerStartY = e.clientY;
+        });
+
+        btn.addEventListener('pointerup', (e) => {
+            if (!isPointerDown) return;
+            isPointerDown = false;
+            // 如果发生了明显的移动，视为拖拽，不触发点击
+            const dx = Math.abs(e.clientX - pointerStartX);
+            const dy = Math.abs(e.clientY - pointerStartY);
+            if (dx > 8 || dy > 8) return;
+
+            // 打开管理器
             if (!linkManager) {
                 linkManager = new LinkManager();
             }
             linkManager.showModal = true;
             linkManager.modal.style.display = 'block';
+            linkManager.fetchLinks();
+
+            // 移动端 Bottom Sheet 滑入动画
+            if (isMobile()) {
+                const container = linkManager.modal.querySelector('.link-manager-container');
+                container.style.transform = 'translateY(100%)';
+                container.style.transition = 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)';
+                requestAnimationFrame(() => {
+                    container.style.transform = 'translateY(0)';
+                });
+            }
+        });
+
+        // 窗口变化时重新定位
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                posX = Math.min(posX, window.innerWidth - btn.offsetWidth - 10);
+                posY = Math.min(posY, window.innerHeight - btn.offsetHeight - 10);
+                btn.style.left = Math.max(0, posX) + 'px';
+                btn.style.top = Math.max(10, posY) + 'px';
+                savePosition(posX, posY);
+            }, 300);
         });
     }
 
-    // 初始化
+    // 初始化：等待页面加载完成后创建悬浮按钮
     setTimeout(createFloatingButton, 1000);
 
 })();
