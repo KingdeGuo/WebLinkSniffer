@@ -461,6 +461,18 @@ h1 {
     opacity: 1;
 }
 
+/* 路径模式标签 */
+.blocked-tag.path-tag {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+    color: #059669;
+}
+
+.blocked-tag.path-tag:hover {
+    background: #d1fae5;
+    border-color: #34d399;
+}
+
 .footer {
     padding-top: 12px;
     border-top: 1px solid #e5e7eb;
@@ -658,6 +670,12 @@ h1 {
 .link-action-btn.domain-block-btn:hover {
     background: #fff7ed;
     color: #ea580c;
+}
+
+/* 路径模式屏蔽按钮 */
+.link-action-btn.path-block-btn:hover {
+    background: #ecfdf5;
+    color: #059669;
 }
 
 /* 图标按钮 */

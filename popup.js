@@ -4,6 +4,7 @@ class LinkManager {
         this.openedLinks = new Set();
         this.filteredUrls = [];       // 按具体 URL 屏蔽
         this.filteredDomains = [];    // 按域名屏蔽（新增）
+        this.filteredPathPatterns = [];  // 按 URL 路径正则模式屏蔽（新增）
         this.selectedUrls = new Set(); // 多选集合（新增）
         this.currentPage = 1;
         this.pageSize = 5;
@@ -25,7 +26,8 @@ class LinkManager {
                 this.loadOpenedLinks(),
                 this.loadSettings(),
                 this.loadFilteredUrls(),
-                this.loadFilteredDomains()
+                this.loadFilteredDomains(),
+                this.loadFilteredPathPatterns()
             ]);
 
             this.setupEventListeners();
@@ -121,6 +123,16 @@ class LinkManager {
         }
     }
 
+    async loadFilteredPathPatterns() {
+        try {
+            const result = await chrome.storage.local.get('filteredPathPatterns');
+            this.filteredPathPatterns = result.filteredPathPatterns || [];
+        } catch (error) {
+            console.error('加载路径模式失败:', error);
+            this.filteredPathPatterns = [];
+        }
+    }
+
     async saveOpenedLinks() {
         try {
             await chrome.storage.local.set({ openedLinks: Array.from(this.openedLinks) });
@@ -153,6 +165,14 @@ class LinkManager {
             await chrome.storage.local.set({ filteredDomains: this.filteredDomains });
         } catch (error) {
             console.error('保存屏蔽域名失败:', error);
+        }
+    }
+
+    async saveFilteredPathPatterns() {
+        try {
+            await chrome.storage.local.set({ filteredPathPatterns: this.filteredPathPatterns });
+        } catch (error) {
+            console.error('保存路径模式失败:', error);
         }
     }
 
@@ -203,13 +223,14 @@ class LinkManager {
             this.updateUI();
         });
         this.clearBlockedBtn.addEventListener('click', () => {
-            if (this.filteredUrls.length === 0 && this.filteredDomains.length === 0) return;
+            if (this.filteredUrls.length === 0 && this.filteredDomains.length === 0 && this.filteredPathPatterns.length === 0) return;
             this.filteredUrls = [];
             this.filteredDomains = [];
-            Promise.all([this.saveFilteredUrls(), this.saveFilteredDomains()]).then(() => {
+            this.filteredPathPatterns = [];
+            Promise.all([this.saveFilteredUrls(), this.saveFilteredDomains(), this.saveFilteredPathPatterns()]).then(() => {
                 this.updateBlockedUrlsBar();
                 this.calculateStats();
-                this.showToast('已清空所有屏蔽链接和域名');
+                this.showToast('已清空所有屏蔽项目');
                 this.fetchLinks();
             });
         });
@@ -471,11 +492,25 @@ class LinkManager {
         }
     }
 
-    // 检查 URL 是否被屏蔽（精确匹配 或 域名匹配）
+    // 检查 URL 是否被屏蔽（精确匹配 或 域名匹配 或 路径模式匹配）
     isUrlBlocked(url) {
         if (this.filteredUrls.includes(url)) return true;
         const domain = this.getDomainFromUrl(url);
         if (domain && this.filteredDomains.includes(domain)) return true;
+        if (this.filteredPathPatterns.length > 0) {
+            try {
+                const urlObj = new URL(url);
+                const pathAndQuery = urlObj.pathname + urlObj.search;
+                for (const pattern of this.filteredPathPatterns) {
+                    try {
+                        const regex = new RegExp(pattern, 'i');
+                        if (regex.test(pathAndQuery) || regex.test(urlObj.pathname)) {
+                            return true;
+                        }
+                    } catch (e) { /* 无效正则跳过 */ }
+                }
+            } catch (e) { /* ignore */ }
+        }
         return false;
     }
 
@@ -485,10 +520,27 @@ class LinkManager {
         return domain && this.filteredDomains.includes(domain);
     }
 
+    // 从 URL 提取路径模式（例如 /blog/some-post → /blog/）
+    extractPathPattern(url) {
+        try {
+            const urlObj = new URL(url);
+            const parts = urlObj.pathname.split('/').filter(Boolean);
+            if (parts.length >= 1) {
+                // 提取第一段路径作为模式（例如 /blog/）
+                return '/' + parts[0] + '/';
+            }
+            return null;
+        } catch (e) {
+            return null;
+        }
+    }
+
     // ========== 过滤与统计 ==========
 
     getFilteredLinks() {
         let filtered = this.links;
+        // 过滤已屏蔽的链接（精确URL、域名、路径模式）
+        filtered = filtered.filter(link => !this.isUrlBlocked(link.url));
         if (this.hideOpenedLinks) {
             filtered = filtered.filter(link => !this.openedLinks.has(link.url));
         }
@@ -503,15 +555,20 @@ class LinkManager {
     }
 
     calculateStats() {
+        // 统计已被屏蔽的链接数量
+        let blockedCount = 0;
+        this.links.forEach(link => {
+            if (this.isUrlBlocked(link.url)) blockedCount++;
+        });
         const totalLinks = this.links.length;
         let openedCount = 0;
         this.links.forEach(link => {
             if (this.openedLinks.has(link.url)) openedCount++;
         });
         this.totalLinksElement.textContent = totalLinks;
-        this.newLinksElement.textContent = totalLinks - openedCount;
+        this.newLinksElement.textContent = totalLinks - openedCount - blockedCount;
         this.openedLinksElement.textContent = openedCount;
-        this.blockedLinksElement.textContent = this.filteredUrls.length + this.filteredDomains.length;
+        this.blockedLinksElement.textContent = blockedCount;
     }
 
     updateUI() {
@@ -629,7 +686,7 @@ class LinkManager {
             });
         }
 
-        // 屏蔽域名按钮（新增 🌐）
+        // 屏蔽域名按钮
         const domainBlockBtn = document.createElement('button');
         const domainBlocked = this.isDomainBlocked(link.url);
         domainBlockBtn.className = `link-action-btn domain-block-btn${domainBlocked ? ' blocked' : ''}`;
@@ -642,9 +699,24 @@ class LinkManager {
             });
         }
 
+        // 屏蔽路径模式按钮（新增 🔗）
+        const pathBlockBtn = document.createElement('button');
+        const pathPattern = this.extractPathPattern(link.url);
+        const pathBlocked = pathPattern && this.filteredPathPatterns.includes(pathPattern);
+        pathBlockBtn.className = `link-action-btn path-block-btn${pathBlocked ? ' blocked' : ''}`;
+        pathBlockBtn.title = pathBlocked ? '该路径模式已屏蔽' : (pathPattern ? `屏蔽所有包含 "${pathPattern}" 的链接` : 'URL 无可用路径模式');
+        pathBlockBtn.textContent = '🔗';
+        if (!pathBlocked && pathPattern) {
+            pathBlockBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.blockPathPatternFromUrl(link.url, pathBlockBtn);
+            });
+        }
+
         actionsDiv.appendChild(copyBtn);
         actionsDiv.appendChild(blockBtn);
         actionsDiv.appendChild(domainBlockBtn);
+        actionsDiv.appendChild(pathBlockBtn);
         div.appendChild(actionsDiv);
 
         return div;
@@ -790,7 +862,7 @@ class LinkManager {
         this.updateBlockedUrlsBar();
         this.calculateStats();
         this.showToastWithUndo(`🚫 已屏蔽链接`, () => this.undoBlockUrl(url));
-        this.removeBlockedLinkFromView(url);
+        this.updateUI();
     }
 
     // ========== 屏蔽域名（新增 🌐） ==========
@@ -819,7 +891,7 @@ class LinkManager {
         this.calculateStats();
         this.showToastWithUndo(`🌐 已屏蔽域名: ${domain}`, () => this.undoBlockDomain(domain));
         // 移除该域名下所有链接
-        this.removeBlockedDomainFromView(domain);
+        this.updateUI();
     }
 
     // 移除域名被封的所有链接
@@ -856,6 +928,78 @@ class LinkManager {
             this.updateBlockedUrlsBar();
             this.calculateStats();
             this.showToast('↩️ 已撤销屏蔽');
+            this.fetchLinks();
+        }
+    }
+
+    // 屏蔽路径模式（新增 🔗）
+    async blockPathPatternFromUrl(url, btn) {
+        const pattern = this.extractPathPattern(url);
+        if (!pattern) {
+            this.showToast('无法提取路径模式', true);
+            return;
+        }
+        if (this.filteredPathPatterns.includes(pattern)) {
+            this.showToast('该路径模式已在屏蔽列表中');
+            return;
+        }
+        if (pattern.length < 3) {
+            this.showToast('路径模式太短，无法屏蔽');
+            return;
+        }
+        this.filteredPathPatterns.push(pattern);
+        await this.saveFilteredPathPatterns();
+
+        if (btn) {
+            btn.classList.add('blocked');
+            btn.title = '该路径模式已屏蔽';
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+        }
+
+        this.updateBlockedUrlsBar();
+        this.calculateStats();
+        this.showToastWithUndo(`🔗 已屏蔽路径模式: ${pattern}`, () => this.undoBlockPathPattern(pattern));
+        this.updateUI();
+    }
+
+    // 移除被路径模式屏蔽的链接
+    removeBlockedPathPatternFromView(pattern) {
+        try {
+            const regex = new RegExp(pattern, 'i');
+            this.links = this.links.filter(link => {
+                try {
+                    const urlObj = new URL(link.url);
+                    return !regex.test(urlObj.pathname + urlObj.search) && !regex.test(urlObj.pathname);
+                } catch (e) { return true; }
+            });
+        } catch (e) { /* 无效正则，不移除 */ }
+        this.currentPage = 1;
+        this.updateUI();
+    }
+
+    // 移除单个路径模式屏蔽
+    async removeBlockedPathPattern(pattern) {
+        const index = this.filteredPathPatterns.indexOf(pattern);
+        if (index > -1) {
+            this.filteredPathPatterns.splice(index, 1);
+            await this.saveFilteredPathPatterns();
+            this.updateBlockedUrlsBar();
+            this.calculateStats();
+            this.showToast('已取消路径模式屏蔽');
+            this.fetchLinks();
+        }
+    }
+
+    // 撤销屏蔽路径模式
+    async undoBlockPathPattern(pattern) {
+        const index = this.filteredPathPatterns.indexOf(pattern);
+        if (index > -1) {
+            this.filteredPathPatterns.splice(index, 1);
+            await this.saveFilteredPathPatterns();
+            this.updateBlockedUrlsBar();
+            this.calculateStats();
+            this.showToast('↩️ 已撤销路径模式屏蔽');
             this.fetchLinks();
         }
     }
@@ -902,13 +1046,24 @@ class LinkManager {
     // ========== 屏蔽栏更新（同时显示 URL 和域名） ==========
 
     updateBlockedUrlsBar() {
-        const totalBlocked = this.filteredUrls.length + this.filteredDomains.length;
+        const totalBlocked = this.filteredUrls.length + this.filteredDomains.length + this.filteredPathPatterns.length;
         if (totalBlocked === 0) {
             this.blockedUrlsBar.style.display = 'none';
             return;
         }
         this.blockedUrlsBar.style.display = 'block';
         this.blockedUrlsTags.innerHTML = '';
+
+        // 显示路径模式屏蔽
+        this.filteredPathPatterns.forEach(pattern => {
+            const tag = document.createElement('span');
+            tag.className = 'blocked-tag path-tag';
+            const shortPattern = pattern.length > 20 ? pattern.substring(0, 17) + '...' : pattern;
+            tag.innerHTML = `🔗 ${shortPattern} <span class="remove-tag">✕</span>`;
+            tag.title = `点击取消路径模式屏蔽: ${pattern}`;
+            tag.addEventListener('click', () => this.removeBlockedPathPattern(pattern));
+            this.blockedUrlsTags.appendChild(tag);
+        });
 
         // 显示屏蔽的域名
         this.filteredDomains.forEach(domain => {

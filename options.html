@@ -347,6 +347,32 @@
             </div>
 
             <div class="section">
+                <h2 class="section-title">屏蔽链接</h2>
+                <p style="font-size: 14px; color: #666; margin-bottom: 10px;">从弹出窗口中添加的精确 URL 屏蔽列表</p>
+                <div class="domain-list" id="filteredUrlList">
+                    <!-- 屏蔽链接列表将在这里动态生成 -->
+                </div>
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-danger" id="clearFilteredUrlsBtn" style="width: auto; flex: none;">清空所有屏蔽链接</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">路径模式屏蔽</h2>
+                <p style="font-size: 14px; color: #666; margin-bottom: 10px;">屏蔽包含特定路径模式的所有链接（如 /blog/, /article/），不受域名限制</p>
+                <div class="domain-list" id="pathPatternList">
+                    <!-- 路径模式列表将在这里动态生成 -->
+                </div>
+                <div class="add-domain">
+                    <input type="text" id="newPathPattern" placeholder="输入路径模式，例如：/blog/">
+                    <button id="addPathPatternBtn">添加路径模式</button>
+                </div>
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-danger" id="clearPathPatternsBtn" style="width: auto; flex: none;">清空所有路径模式</button>
+                </div>
+            </div>
+
+            <div class="section">
                 <h2 class="section-title">批量操作</h2>
                 <div class="input-group">
                     <label for="batchInput">批量添加域名（每行一个）</label>

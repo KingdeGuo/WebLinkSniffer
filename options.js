@@ -22,6 +22,7 @@ class OptionsManager {
         this.filteredDomains = [];
         this.filteredKeywords = [];
         this.filteredUrls = [];
+        this.filteredPathPatterns = [];
         this.enableFilter = true;
         this.hideFiltered = true;
         this.enableKeywordFilter = false;
@@ -56,6 +57,12 @@ class OptionsManager {
         // 屏蔽链接相关元素
         this.filteredUrlList = document.getElementById('filteredUrlList');
         this.clearFilteredUrlsBtn = document.getElementById('clearFilteredUrlsBtn');
+        
+        // 路径模式相关元素
+        this.pathPatternList = document.getElementById('pathPatternList');
+        this.newPathPatternInput = document.getElementById('newPathPattern');
+        this.addPathPatternBtn = document.getElementById('addPathPatternBtn');
+        this.clearPathPatternsBtn = document.getElementById('clearPathPatternsBtn');
     }
     
     async loadSettings() {
@@ -64,6 +71,7 @@ class OptionsManager {
                 'filteredDomains',
                 'filteredKeywords',
                 'filteredUrls',
+                'filteredPathPatterns',
                 'enableFilter',
                 'hideFiltered',
                 'enableKeywordFilter',
@@ -73,6 +81,7 @@ class OptionsManager {
             this.filteredDomains = result.filteredDomains || [...DEFAULT_FILTERED_DOMAINS];
             this.filteredKeywords = result.filteredKeywords || [...DEFAULT_FILTERED_KEYWORDS];
             this.filteredUrls = result.filteredUrls || [];
+            this.filteredPathPatterns = result.filteredPathPatterns || [];
             this.enableFilter = result.enableFilter !== undefined ? result.enableFilter : true;
             this.hideFiltered = result.hideFiltered !== undefined ? result.hideFiltered : true;
             this.enableKeywordFilter = result.enableKeywordFilter !== undefined ? result.enableKeywordFilter : false;
@@ -87,6 +96,7 @@ class OptionsManager {
             this.updatePresetTags();
             this.renderKeywordList();
             this.renderFilteredUrlList();
+            this.renderPathPatternList();
             
             console.log('设置加载完成');
         } catch (error) {
@@ -101,6 +111,7 @@ class OptionsManager {
                 filteredDomains: this.filteredDomains,
                 filteredKeywords: this.filteredKeywords,
                 filteredUrls: this.filteredUrls,
+                filteredPathPatterns: this.filteredPathPatterns,
                 enableFilter: this.enableFilter,
                 hideFiltered: this.hideFiltered,
                 enableKeywordFilter: this.enableKeywordFilter,
@@ -164,10 +175,10 @@ class OptionsManager {
         });
         
         // 预设域名标签点击事件
-        this.presetDomains.addEventListener('click', (e) => {
+        this.presetDomains.addEventListener('click', async (e) => {
             if (e.target.classList.contains('preset-tag') && !e.target.classList.contains('added')) {
                 const domain = e.target.dataset.domain;
-                this.addDomainToList(domain);
+                await this.addDomainToList(domain);
                 e.target.classList.add('added');
             }
         });
@@ -193,9 +204,16 @@ class OptionsManager {
         
         // 清空屏蔽链接按钮
         this.clearFilteredUrlsBtn.addEventListener('click', () => this.clearAllFilteredUrls());
+        
+        // 路径模式事件
+        this.addPathPatternBtn.addEventListener('click', () => this.addPathPattern());
+        this.newPathPatternInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.addPathPattern();
+        });
+        this.clearPathPatternsBtn.addEventListener('click', () => this.clearAllPathPatterns());
     }
     
-    addDomain() {
+    async addDomain() {
         const domain = this.newDomainInput.value.trim();
         
         if (!domain) {
@@ -204,7 +222,7 @@ class OptionsManager {
         }
         
         if (this.isValidDomain(domain)) {
-            this.addDomainToList(domain);
+            await this.addDomainToList(domain);
             this.newDomainInput.value = '';
         } else {
             this.showToast('请输入有效的域名', true);
@@ -323,6 +341,7 @@ class OptionsManager {
             this.filteredDomains = [...DEFAULT_FILTERED_DOMAINS];
             this.filteredKeywords = [...DEFAULT_FILTERED_KEYWORDS];
             this.filteredUrls = [];
+            this.filteredPathPatterns = [];
             this.enableFilter = true;
             this.hideFiltered = true;
             this.enableKeywordFilter = false;
@@ -337,11 +356,12 @@ class OptionsManager {
             this.updatePresetTags();
             this.renderKeywordList();
             this.renderFilteredUrlList();
+            this.renderPathPatternList();
             this.showToast('已恢复默认设置');
         }
     }
     
-    addKeyword() {
+    async addKeyword() {
         const keyword = this.newKeywordInput.value.trim();
         
         if (!keyword) {
@@ -349,7 +369,7 @@ class OptionsManager {
             return;
         }
         
-        this.addKeywordToList(keyword);
+        await this.addKeywordToList(keyword);
         this.newKeywordInput.value = '';
     }
     
@@ -396,10 +416,16 @@ class OptionsManager {
         this.filteredKeywords.forEach(keyword => {
             const item = document.createElement('div');
             item.className = 'domain-item';
-            item.innerHTML = `
-                <span>${keyword}</span>
-                <button onclick="optionsManager.removeKeyword('${keyword}')">删除</button>
-            `;
+            
+            const spanEl = document.createElement('span');
+            spanEl.textContent = keyword;
+            
+            const btnEl = document.createElement('button');
+            btnEl.textContent = '删除';
+            btnEl.addEventListener('click', () => this.removeKeyword(keyword));
+            
+            item.appendChild(spanEl);
+            item.appendChild(btnEl);
             this.keywordList.appendChild(item);
         });
     }
@@ -415,10 +441,16 @@ class OptionsManager {
         this.filteredDomains.forEach(domain => {
             const item = document.createElement('div');
             item.className = 'domain-item';
-            item.innerHTML = `
-                <span>${domain}</span>
-                <button onclick="optionsManager.removeDomain('${domain}')">删除</button>
-            `;
+            
+            const spanEl = document.createElement('span');
+            spanEl.textContent = domain;
+            
+            const btnEl = document.createElement('button');
+            btnEl.textContent = '删除';
+            btnEl.addEventListener('click', () => this.removeDomain(domain));
+            
+            item.appendChild(spanEl);
+            item.appendChild(btnEl);
             this.domainList.appendChild(item);
         });
     }
@@ -448,12 +480,19 @@ class OptionsManager {
         this.filteredUrls.forEach(url => {
             const item = document.createElement('div');
             item.className = 'domain-item';
+            
+            const spanEl = document.createElement('span');
             // 显示简短版本
             const shortUrl = url.length > 60 ? url.substring(0, 57) + '...' : url;
-            item.innerHTML = `
-                <span title="${url.replace(/"/g, '"')}">${shortUrl}</span>
-                <button onclick="optionsManager.removeFilteredUrl('${url.replace(/'/g, "\\'")}')">删除</button>
-            `;
+            spanEl.textContent = shortUrl;
+            spanEl.setAttribute('title', url);
+            
+            const btnEl = document.createElement('button');
+            btnEl.textContent = '删除';
+            btnEl.addEventListener('click', () => this.removeFilteredUrl(url));
+            
+            item.appendChild(spanEl);
+            item.appendChild(btnEl);
             this.filteredUrlList.appendChild(item);
         });
     }
@@ -490,6 +529,101 @@ class OptionsManager {
             console.log('屏蔽链接列表已自动保存');
         } catch (error) {
             console.error('自动保存屏蔽链接列表失败:', error);
+        }
+    }
+    
+    // ========== 路径模式管理 ==========
+    
+    async addPathPattern() {
+        console.log('addPathPattern 被调用');
+        const pattern = this.newPathPatternInput.value.trim();
+        console.log('输入的模式:', pattern);
+        if (!pattern) {
+            this.showToast('请输入路径模式', true);
+            return;
+        }
+        if (pattern.length < 3) {
+            this.showToast('路径模式太短（至少3个字符）', true);
+            return;
+        }
+        console.log('开始调用 addPathPatternToList');
+        await this.addPathPatternToList(pattern);
+        this.newPathPatternInput.value = '';
+    }
+    
+    async addPathPatternToList(pattern) {
+        console.log('addPathPatternToList 被调用，pattern=', pattern);
+        console.log('当前 filteredPathPatterns:', this.filteredPathPatterns);
+        if (!this.filteredPathPatterns.includes(pattern)) {
+            this.filteredPathPatterns.push(pattern);
+            console.log('\u6dfb加后 filteredPathPatterns:', this.filteredPathPatterns);
+            this.renderPathPatternList();
+            await this.savePathPatternsToStorage();
+            this.showToast(`已添加路径模式: ${pattern}`);
+        } else {
+            this.showToast('路径模式已存在', true);
+        }
+    }
+    
+    async removePathPattern(pattern) {
+        const index = this.filteredPathPatterns.indexOf(pattern);
+        if (index > -1) {
+            this.filteredPathPatterns.splice(index, 1);
+            this.renderPathPatternList();
+            await this.savePathPatternsToStorage();
+            this.showToast(`已移除路径模式: ${pattern}`);
+        }
+    }
+    
+    async clearAllPathPatterns() {
+        if (this.filteredPathPatterns.length === 0) {
+            this.showToast('路径模式列表已为空', true);
+            return;
+        }
+        if (confirm('确定要清空所有路径模式吗？')) {
+            this.filteredPathPatterns = [];
+            this.renderPathPatternList();
+            await this.savePathPatternsToStorage();
+            this.showToast('已清空所有路径模式');
+        }
+    }
+    
+    renderPathPatternList() {
+        console.log('renderPathPatternList 被调用');
+        this.pathPatternList.innerHTML = '';
+        if (this.filteredPathPatterns.length === 0) {
+            console.log('路径模式为空');
+            this.pathPatternList.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">暂无路径模式<br><small style="color:#bbb;">例如: /blog/, /article/, /news/</small></div>';
+            return;
+        }
+        console.log('渲染 ' + this.filteredPathPatterns.length + ' 个路径模式');
+        this.filteredPathPatterns.forEach((pattern, index) => {
+            const item = document.createElement('div');
+            item.className = 'domain-item';
+            
+            const spanEl = document.createElement('span');
+            const codeEl = document.createElement('code');
+            codeEl.textContent = pattern;
+            spanEl.appendChild(codeEl);
+            
+            const btnEl = document.createElement('button');
+            btnEl.textContent = '删除';
+            btnEl.addEventListener('click', () => this.removePathPattern(pattern));
+            
+            item.appendChild(spanEl);
+            item.appendChild(btnEl);
+            this.pathPatternList.appendChild(item);
+        });
+    }
+    
+    async savePathPatternsToStorage() {
+        try {
+            await chrome.storage.local.set({
+                filteredPathPatterns: this.filteredPathPatterns
+            });
+            console.log('路径模式列表已自动保存');
+        } catch (error) {
+            console.error('自动保存路径模式列表失败:', error);
         }
     }
     

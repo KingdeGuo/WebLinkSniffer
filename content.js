@@ -21,19 +21,40 @@ async function getFilteredLinks() {
             'filteredDomains',
             'filteredKeywords',
             'filteredUrls',
+            'filteredPathPatterns',
             'enableFilter',
             'hideFiltered',
             'enableKeywordFilter',
-            'hideKeywordFiltered'
+            'hideKeywordFiltered',
+            'enablePathPatternFilter',
+            'hidePathPatternFiltered'
         ]);
         
         const filteredDomains = result.filteredDomains || [];
         const filteredKeywords = result.filteredKeywords || [];
         const filteredUrls = result.filteredUrls || [];
+        const filteredPathPatterns = result.filteredPathPatterns || [];
         const enableFilter = result.enableFilter !== undefined ? result.enableFilter : true;
         const hideFiltered = result.hideFiltered !== undefined ? result.hideFiltered : true;
         const enableKeywordFilter = result.enableKeywordFilter !== undefined ? result.enableKeywordFilter : false;
         const hideKeywordFiltered = result.hideKeywordFiltered !== undefined ? result.hideKeywordFiltered : true;
+        const enablePathPatternFilter = result.enablePathPatternFilter !== undefined ? result.enablePathPatternFilter : true;
+        const hidePathPatternFiltered = result.hidePathPatternFiltered !== undefined ? result.hidePathPatternFiltered : true;
+        
+        // 预编译路径正则表达式
+        const pathPatternRegexes = [];
+        if (enablePathPatternFilter && filteredPathPatterns.length > 0) {
+            filteredPathPatterns.forEach(pattern => {
+                try {
+                    pathPatternRegexes.push({
+                        pattern: pattern,
+                        regex: new RegExp(pattern, 'i')
+                    });
+                } catch (e) {
+                    // 无效正则，跳过
+                }
+            });
+        }
         
         // 过滤链接
         return links.filter(link => {
@@ -54,6 +75,21 @@ async function getFilteredLinks() {
                     });
                     
                     if (isDomainFiltered) {
+                        return false;
+                    }
+                }
+                
+                // 路径模式过滤（正则匹配 URL 路径）
+                if (pathPatternRegexes.length > 0) {
+                    const urlObj = new URL(link.url);
+                    const pathAndQuery = urlObj.pathname + urlObj.search;
+                    
+                    const isPathFiltered = pathPatternRegexes.some(({ regex }) => {
+                        // 先匹配完整 path+query，再单独匹配 pathname
+                        return regex.test(pathAndQuery) || regex.test(urlObj.pathname);
+                    });
+                    
+                    if (hidePathPatternFiltered && isPathFiltered) {
                         return false;
                     }
                 }
