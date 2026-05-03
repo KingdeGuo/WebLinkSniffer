@@ -1,0 +1,167 @@
+{
+  "appName": {
+    "message": "网址获取"
+  },
+  "appDescription": {
+    "message": "获取当前网页中的所有超链接，智能排序、链接去重，分页展示，支持域名过滤、关键词过滤、路径模式过滤，一键屏蔽链接/域名/路径"
+  },
+  "webLinks": {
+    "message": "网页链接"
+  },
+  "refreshLinks": {
+    "message": "刷新链接"
+  },
+  "openPageLinks": {
+    "message": "打开本页链接"
+  },
+  "settings": {
+    "message": "⚙️ 配置"
+  },
+  "search": {
+    "message": "搜索链接..."
+  },
+  "page": {
+    "message": "第 {{pageNum}} 页，共 {{totalPages}} 页"
+  },
+  "previousPage": {
+    "message": "上一页"
+  },
+  "nextPage": {
+    "message": "下一页"
+  },
+  "autoMoveOpened": {
+    "message": "自动将已打开链接移到末尾"
+  },
+  "hideOpenedLinks": {
+    "message": "隐藏已打开链接"
+  },
+  "hideBlockedLinks": {
+    "message": "隐藏已屏蔽链接"
+  },
+  "totalLinks": {
+    "message": "总链接数"
+  },
+  "newLinks": {
+    "message": "新链接"
+  },
+  "openedLinks": {
+    "message": "已打开链接"
+  },
+  "blockedLinks": {
+    "message": "已屏蔽链接"
+  },
+  "open": {
+    "message": "打开"
+  },
+  "copy": {
+    "message": "复制"
+  },
+  "block": {
+    "message": "屏蔽"
+  },
+  "blockDomain": {
+    "message": "屏蔽域名"
+  },
+  "blockPath": {
+    "message": "屏蔽路径"
+  },
+  "opened": {
+    "message": "已打开"
+  },
+  "unopened": {
+    "message": "未打开"
+  },
+  "copySuccess": {
+    "message": "链接已复制到剪贴板！"
+  },
+  "unselectAll": {
+    "message": "取消全选"
+  },
+  "selectAll": {
+    "message": "全选"
+  },
+  "batchBlock": {
+    "message": "批量屏蔽"
+  },
+  "batchBlockDomain": {
+    "message": "批量屏蔽域名"
+  },
+  "batchOpen": {
+    "message": "批量打开"
+  },
+  "batchCopy": {
+    "message": "批量复制"
+  },
+  "batchDelete": {
+    "message": "批量删除"
+  },
+  "clearAllBlockedLinks": {
+    "message": "清空所有屏蔽"
+  },
+  "noLinksFound": {
+    "message": "未找到链接"
+  },
+  "configurationTitle": {
+    "message": "网址获取 - 配置"
+  },
+  "domainBlacklist": {
+    "message": "域名屏蔽列表"
+  },
+  "urlBlacklist": {
+    "message": "链接屏蔽列表"
+  },
+  "pathPatternBlacklist": {
+    "message": "路径模式屏蔽列表"
+  },
+  "keywordBlacklist": {
+    "message": "关键词屏蔽列表"
+  },
+  "addDomain": {
+    "message": "添加域名"
+  },
+  "addUrl": {
+    "message": "添加链接"
+  },
+  "addPathPattern": {
+    "message": "添加路径模式"
+  },
+  "addKeyword": {
+    "message": "添加关键词"
+  },
+  "enterDomain": {
+    "message": "输入域名（如：example.com）"
+  },
+  "enterUrl": {
+    "message": "输入完整链接"
+  },
+  "enterPathPattern": {
+    "message": "输入路径模式（支持正则表达式，如：/blog/）"
+  },
+  "enterKeyword": {
+    "message": "输入关键词"
+  },
+  "delete": {
+    "message": "删除"
+  },
+  "clearAll": {
+    "message": "清空列表"
+  },
+  "save": {
+    "message": "保存"
+  },
+  "cancel": {
+    "message": "取消"
+  },
+  "saved": {
+    "message": "设置已保存！"
+  },
+  "error": {
+    "message": "出错了"
+  },
+  "enableKeywordFilter": {
+    "message": "启用关键词过滤"
+  },
+  "enablePathPatternFilter": {
+    "message": "启用路径模式过滤"
+  }
+}

@@ -1,0 +1,104 @@
+<!-- 国际化改造后的 popup.html 示例 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="appName"></title>
+    <link rel="stylesheet" href="popup.css">
+    <script src="i18n.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 data-i18n="webLinks"></h1>
+            <div class="language-selector">
+                <select id="languageSelect" class="lang-select">
+                    <option value="zh_CN">中文</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button id="refreshBtn" class="btn" data-i18n="refreshLinks"></button>
+            <button id="openAllBtn" class="btn primary" data-i18n="openPageLinks"></button>
+            <button id="optionsBtn" class="btn" title="⚙️">
+                <span data-i18n="settings"></span>
+            </button>
+        </div>
+        
+        <!-- 搜索框 -->
+        <div class="search-box">
+            <input type="text" id="searchInput" class="search-input" 
+                   data-i18n="search" data-i18n-type="placeholder">
+        </div>
+
+        <!-- 过滤选项 -->
+        <div class="filter-options">
+            <label class="checkbox-label">
+                <input type="checkbox" id="autoOpenCheckbox">
+                <span data-i18n="autoMoveOpened"></span>
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="hideOpenedCheckbox">
+                <span data-i18n="hideOpenedLinks"></span>
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="hideBlockedCheckbox">
+                <span data-i18n="hideBlockedLinks"></span>
+            </label>
+        </div>
+
+        <!-- 统计信息 -->
+        <div class="stats">
+            <div class="stat-item">
+                <span data-i18n="totalLinks"></span>: 
+                <span id="totalLinks">0</span>
+            </div>
+            <div class="stat-item">
+                <span data-i18n="newLinks"></span>: 
+                <span id="newLinks">0</span>
+            </div>
+            <div class="stat-item">
+                <span data-i18n="openedLinks"></span>: 
+                <span id="openedLinks">0</span>
+            </div>
+        </div>
+
+        <!-- 分页 -->
+        <div class="pagination">
+            <button id="prevBtn" class="pagination-btn" data-i18n="previousPage"></button>
+            <span id="pageInfo"></span>
+            <button id="nextBtn" class="pagination-btn" data-i18n="nextPage"></button>
+        </div>
+
+        <!-- 链接列表 -->
+        <div id="linksContainer" class="links-container"></div>
+
+        <!-- 已屏蔽链接 -->
+        <div id="blockedSection" class="blocked-section" style="display: none;">
+            <div class="blocked-header">
+                <span data-i18n="blockedLinks"></span>
+                <button id="toggleBlockedBtn" class="toggle-btn">▼</button>
+            </div>
+            <div id="blockedList" class="blocked-list"></div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+    <script>
+        // 国际化初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            // 设置语言选择器
+            const langSelect = document.getElementById('languageSelect');
+            langSelect.value = I18n.getLanguage();
+            
+            langSelect.addEventListener('change', (e) => {
+                I18n.setLanguage(e.target.value);
+                location.reload();
+            });
+        });
+    </script>
+</body>
+</html>

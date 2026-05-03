@@ -1,0 +1,167 @@
+{
+  "appName": {
+    "message": "Web Link Sniffer"
+  },
+  "appDescription": {
+    "message": "Extract all hyperlinks from web pages with smart sorting, link deduplication, pagination display, support for domain filtering, keyword filtering, path pattern filtering, and one-click blocking"
+  },
+  "webLinks": {
+    "message": "Web Links"
+  },
+  "refreshLinks": {
+    "message": "Refresh Links"
+  },
+  "openPageLinks": {
+    "message": "Open All Links on This Page"
+  },
+  "settings": {
+    "message": "⚙️ Settings"
+  },
+  "search": {
+    "message": "Search links..."
+  },
+  "page": {
+    "message": "Page {{pageNum}} of {{totalPages}}"
+  },
+  "previousPage": {
+    "message": "Previous"
+  },
+  "nextPage": {
+    "message": "Next"
+  },
+  "autoMoveOpened": {
+    "message": "Auto move opened links to end"
+  },
+  "hideOpenedLinks": {
+    "message": "Hide opened links"
+  },
+  "hideBlockedLinks": {
+    "message": "Hide blocked links"
+  },
+  "totalLinks": {
+    "message": "Total Links"
+  },
+  "newLinks": {
+    "message": "New Links"
+  },
+  "openedLinks": {
+    "message": "Opened Links"
+  },
+  "blockedLinks": {
+    "message": "Blocked Links"
+  },
+  "open": {
+    "message": "Open"
+  },
+  "copy": {
+    "message": "Copy"
+  },
+  "block": {
+    "message": "Block"
+  },
+  "blockDomain": {
+    "message": "Block Domain"
+  },
+  "blockPath": {
+    "message": "Block Path"
+  },
+  "opened": {
+    "message": "Opened"
+  },
+  "unopened": {
+    "message": "Unopened"
+  },
+  "copySuccess": {
+    "message": "Link copied to clipboard!"
+  },
+  "unselectAll": {
+    "message": "Deselect All"
+  },
+  "selectAll": {
+    "message": "Select All"
+  },
+  "batchBlock": {
+    "message": "Batch Block"
+  },
+  "batchBlockDomain": {
+    "message": "Batch Block Domain"
+  },
+  "batchOpen": {
+    "message": "Batch Open"
+  },
+  "batchCopy": {
+    "message": "Batch Copy"
+  },
+  "batchDelete": {
+    "message": "Batch Delete"
+  },
+  "clearAllBlockedLinks": {
+    "message": "Clear All Blocks"
+  },
+  "noLinksFound": {
+    "message": "No links found"
+  },
+  "configurationTitle": {
+    "message": "Web Link Sniffer - Settings"
+  },
+  "domainBlacklist": {
+    "message": "Domain Blacklist"
+  },
+  "urlBlacklist": {
+    "message": "URL Blacklist"
+  },
+  "pathPatternBlacklist": {
+    "message": "Path Pattern Blacklist"
+  },
+  "keywordBlacklist": {
+    "message": "Keyword Blacklist"
+  },
+  "addDomain": {
+    "message": "Add Domain"
+  },
+  "addUrl": {
+    "message": "Add URL"
+  },
+  "addPathPattern": {
+    "message": "Add Path Pattern"
+  },
+  "addKeyword": {
+    "message": "Add Keyword"
+  },
+  "enterDomain": {
+    "message": "Enter domain (e.g. example.com)"
+  },
+  "enterUrl": {
+    "message": "Enter full URL"
+  },
+  "enterPathPattern": {
+    "message": "Enter path pattern (regex supported, e.g. /blog/)"
+  },
+  "enterKeyword": {
+    "message": "Enter keyword"
+  },
+  "delete": {
+    "message": "Delete"
+  },
+  "clearAll": {
+    "message": "Clear List"
+  },
+  "save": {
+    "message": "Save"
+  },
+  "cancel": {
+    "message": "Cancel"
+  },
+  "saved": {
+    "message": "Settings saved!"
+  },
+  "error": {
+    "message": "An error occurred"
+  },
+  "enableKeywordFilter": {
+    "message": "Enable keyword filtering"
+  },
+  "enablePathPatternFilter": {
+    "message": "Enable path pattern filtering"
+  }
+}
