@@ -16,11 +16,29 @@
             <button id="optionsBtn" class="btn">⚙️ 配置</button>
         </div>
         
+        <!-- 搜索框 -->
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="🔍 搜索链接标题或URL..." />
+            <span id="searchClearBtn" class="search-clear">✕</span>
+        </div>
+        
         <div class="stats">
             <div class="stats-detail">
                 <span>总计: <span id="totalLinks">0</span></span>
                 <span>新链接: <span id="newLinks">0</span></span>
                 <span>已打开: <span id="openedLinks">0</span></span>
+                <span>已屏蔽: <span id="blockedLinks">0</span></span>
+            </div>
+        </div>
+        
+        <!-- 批量操作工具栏（选中链接时显示） -->
+        <div id="bulkActionsBar" class="bulk-actions-bar" style="display:none;">
+            <span id="selectedCount" class="selected-count">已选 0 项</span>
+            <div class="bulk-actions">
+                <button id="bulkBlockBtn" class="btn-sm btn-danger">🚫 批量屏蔽</button>
+                <button id="bulkBlockDomainBtn" class="btn-sm btn-warning">🌐 屏蔽域名</button>
+                <button id="bulkCopyBtn" class="btn-sm">📋 批量复制</button>
+                <button id="bulkOpenBtn" class="btn-sm btn-primary-sm">🔗 批量打开</button>
             </div>
         </div>
         
@@ -33,6 +51,15 @@
             <button id="prevBtn" class="btn">上一页</button>
             <span id="pageInfo">第 1 页 / 共 1 页</span>
             <button id="nextBtn" class="btn">下一页</button>
+        </div>
+        
+        <!-- 已屏蔽链接快捷管理 -->
+        <div id="blockedUrlsBar" class="blocked-domains-bar" style="display:none;">
+            <div class="blocked-domains-header">
+                <span>🚫 已屏蔽链接</span>
+                <button id="clearBlockedBtn" class="btn-link">清空</button>
+            </div>
+            <div id="blockedUrlsTags" class="blocked-domains-tags"></div>
         </div>
         
         <div class="footer">
@@ -48,6 +75,9 @@
             </div>
         </div>
     </div>
+    
+    <!-- Toast 通知 -->
+    <div id="toast" class="toast"></div>
     
     <script src="popup.js"></script>
 </body>

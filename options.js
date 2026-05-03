@@ -21,6 +21,7 @@ class OptionsManager {
     constructor() {
         this.filteredDomains = [];
         this.filteredKeywords = [];
+        this.filteredUrls = [];
         this.enableFilter = true;
         this.hideFiltered = true;
         this.enableKeywordFilter = false;
@@ -51,6 +52,10 @@ class OptionsManager {
         this.addKeywordBtn = document.getElementById('addKeywordBtn');
         this.enableKeywordFilterCheckbox = document.getElementById('enableKeywordFilter');
         this.hideKeywordFilteredCheckbox = document.getElementById('hideKeywordFiltered');
+        
+        // 屏蔽链接相关元素
+        this.filteredUrlList = document.getElementById('filteredUrlList');
+        this.clearFilteredUrlsBtn = document.getElementById('clearFilteredUrlsBtn');
     }
     
     async loadSettings() {
@@ -58,6 +63,7 @@ class OptionsManager {
             const result = await chrome.storage.local.get([
                 'filteredDomains',
                 'filteredKeywords',
+                'filteredUrls',
                 'enableFilter',
                 'hideFiltered',
                 'enableKeywordFilter',
@@ -66,6 +72,7 @@ class OptionsManager {
             
             this.filteredDomains = result.filteredDomains || [...DEFAULT_FILTERED_DOMAINS];
             this.filteredKeywords = result.filteredKeywords || [...DEFAULT_FILTERED_KEYWORDS];
+            this.filteredUrls = result.filteredUrls || [];
             this.enableFilter = result.enableFilter !== undefined ? result.enableFilter : true;
             this.hideFiltered = result.hideFiltered !== undefined ? result.hideFiltered : true;
             this.enableKeywordFilter = result.enableKeywordFilter !== undefined ? result.enableKeywordFilter : false;
@@ -79,6 +86,7 @@ class OptionsManager {
             this.renderDomainList();
             this.updatePresetTags();
             this.renderKeywordList();
+            this.renderFilteredUrlList();
             
             console.log('设置加载完成');
         } catch (error) {
@@ -92,6 +100,7 @@ class OptionsManager {
             await chrome.storage.local.set({
                 filteredDomains: this.filteredDomains,
                 filteredKeywords: this.filteredKeywords,
+                filteredUrls: this.filteredUrls,
                 enableFilter: this.enableFilter,
                 hideFiltered: this.hideFiltered,
                 enableKeywordFilter: this.enableKeywordFilter,
@@ -181,6 +190,9 @@ class OptionsManager {
             this.hideKeywordFiltered = e.target.checked;
             await this.saveFilterSettings();
         });
+        
+        // 清空屏蔽链接按钮
+        this.clearFilteredUrlsBtn.addEventListener('click', () => this.clearAllFilteredUrls());
     }
     
     addDomain() {
@@ -310,6 +322,7 @@ class OptionsManager {
         if (confirm('确定要恢复默认设置吗？这将覆盖当前的配置。')) {
             this.filteredDomains = [...DEFAULT_FILTERED_DOMAINS];
             this.filteredKeywords = [...DEFAULT_FILTERED_KEYWORDS];
+            this.filteredUrls = [];
             this.enableFilter = true;
             this.hideFiltered = true;
             this.enableKeywordFilter = false;
@@ -323,6 +336,7 @@ class OptionsManager {
             this.renderDomainList();
             this.updatePresetTags();
             this.renderKeywordList();
+            this.renderFilteredUrlList();
             this.showToast('已恢复默认设置');
         }
     }
@@ -419,6 +433,64 @@ class OptionsManager {
                 tag.classList.remove('added');
             }
         });
+    }
+    
+    // ========== 屏蔽链接管理 ==========
+    
+    renderFilteredUrlList() {
+        this.filteredUrlList.innerHTML = '';
+        
+        if (this.filteredUrls.length === 0) {
+            this.filteredUrlList.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">暂无屏蔽链接</div>';
+            return;
+        }
+        
+        this.filteredUrls.forEach(url => {
+            const item = document.createElement('div');
+            item.className = 'domain-item';
+            // 显示简短版本
+            const shortUrl = url.length > 60 ? url.substring(0, 57) + '...' : url;
+            item.innerHTML = `
+                <span title="${url.replace(/"/g, '"')}">${shortUrl}</span>
+                <button onclick="optionsManager.removeFilteredUrl('${url.replace(/'/g, "\\'")}')">删除</button>
+            `;
+            this.filteredUrlList.appendChild(item);
+        });
+    }
+    
+    async removeFilteredUrl(url) {
+        const index = this.filteredUrls.indexOf(url);
+        if (index > -1) {
+            this.filteredUrls.splice(index, 1);
+            this.renderFilteredUrlList();
+            await this.saveFilteredUrlsToStorage();
+            this.showToast('已移除屏蔽链接');
+        }
+    }
+    
+    async clearAllFilteredUrls() {
+        if (this.filteredUrls.length === 0) {
+            this.showToast('屏蔽链接列表已为空', true);
+            return;
+        }
+        
+        if (confirm('确定要清空所有屏蔽链接吗？')) {
+            this.filteredUrls = [];
+            this.renderFilteredUrlList();
+            await this.saveFilteredUrlsToStorage();
+            this.showToast('已清空所有屏蔽链接');
+        }
+    }
+    
+    async saveFilteredUrlsToStorage() {
+        try {
+            await chrome.storage.local.set({
+                filteredUrls: this.filteredUrls
+            });
+            console.log('屏蔽链接列表已自动保存');
+        } catch (error) {
+            console.error('自动保存屏蔽链接列表失败:', error);
+        }
     }
     
     showToast(message, isError = false) {

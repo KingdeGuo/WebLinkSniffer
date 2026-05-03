@@ -20,6 +20,7 @@ async function getFilteredLinks() {
         const result = await chrome.storage.local.get([
             'filteredDomains',
             'filteredKeywords',
+            'filteredUrls',
             'enableFilter',
             'hideFiltered',
             'enableKeywordFilter',
@@ -28,6 +29,7 @@ async function getFilteredLinks() {
         
         const filteredDomains = result.filteredDomains || [];
         const filteredKeywords = result.filteredKeywords || [];
+        const filteredUrls = result.filteredUrls || [];
         const enableFilter = result.enableFilter !== undefined ? result.enableFilter : true;
         const hideFiltered = result.hideFiltered !== undefined ? result.hideFiltered : true;
         const enableKeywordFilter = result.enableKeywordFilter !== undefined ? result.enableKeywordFilter : false;
@@ -36,34 +38,34 @@ async function getFilteredLinks() {
         // 过滤链接
         return links.filter(link => {
             try {
-                // 域名过滤
-                if (enableFilter && filteredDomains.length > 0) {
+                // 精确 URL 过滤（始终生效，来自 popup 一键屏蔽 / options 配置）
+                if (filteredUrls.length > 0 && filteredUrls.includes(link.url)) {
+                    return false;
+                }
+                
+                // 域名过滤（始终生效，来自 popup 一键屏蔽域名 🌐）
+                if (filteredDomains.length > 0) {
                     const urlObj = new URL(link.url);
                     const domain = urlObj.hostname.toLowerCase();
                     
-                    // 检查域名是否在过滤列表中
                     const isDomainFiltered = filteredDomains.some(filteredDomain => {
-                        // 支持子域名匹配
                         return domain === filteredDomain || 
                                domain.endsWith('.' + filteredDomain);
                     });
                     
-                    // 如果隐藏被过滤的链接，则不返回被过滤的链接
-                    if (hideFiltered && isDomainFiltered) {
+                    if (isDomainFiltered) {
                         return false;
                     }
                 }
                 
-                // 关键词过滤
+                // 关键词过滤（来自 options 页面配置）
                 if (enableKeywordFilter && filteredKeywords.length > 0) {
                     const title = (link.title || '').toLowerCase();
                     
-                    // 检查标题是否包含过滤关键词
                     const isKeywordFiltered = filteredKeywords.some(keyword => {
                         return title.includes(keyword.toLowerCase());
                     });
                     
-                    // 如果隐藏被过滤的链接，则不返回被过滤的链接
                     if (hideKeywordFiltered && isKeywordFiltered) {
                         return false;
                     }
@@ -71,7 +73,6 @@ async function getFilteredLinks() {
                 
                 return true;
             } catch (e) {
-                // URL解析失败，保留链接
                 return true;
             }
         });
