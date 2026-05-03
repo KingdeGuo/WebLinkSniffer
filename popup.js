@@ -10,6 +10,7 @@ class LinkManager {
         this.pageSize = 5;
         this.autoMoveOpened = true;
         this.hideOpenedLinks = true;
+        this.hideBlockedLinks = true;
         this.searchQuery = '';
         this.retryCount = 0;
         this.maxRetries = 3;
@@ -56,6 +57,7 @@ class LinkManager {
         this.optionsBtn = document.getElementById('optionsBtn');
         this.autoOpenCheckbox = document.getElementById('autoOpenCheckbox');
         this.hideOpenedCheckbox = document.getElementById('hideOpenedCheckbox');
+        this.hideBlockedCheckbox = document.getElementById('hideBlockedCheckbox');
         this.searchInput = document.getElementById('searchInput');
         this.searchClearBtn = document.getElementById('searchClearBtn');
         this.toast = document.getElementById('toast');
@@ -87,7 +89,7 @@ class LinkManager {
 
     async loadSettings() {
         try {
-            const result = await chrome.storage.local.get(['autoMoveOpened', 'hideOpenedLinks']);
+            const result = await chrome.storage.local.get(['autoMoveOpened', 'hideOpenedLinks', 'hideBlockedLinks']);
             if (result.autoMoveOpened !== undefined) {
                 this.autoMoveOpened = result.autoMoveOpened;
                 this.autoOpenCheckbox.checked = this.autoMoveOpened;
@@ -95,6 +97,10 @@ class LinkManager {
             if (result.hideOpenedLinks !== undefined) {
                 this.hideOpenedLinks = result.hideOpenedLinks;
                 this.hideOpenedCheckbox.checked = this.hideOpenedLinks;
+            }
+            if (result.hideBlockedLinks !== undefined) {
+                this.hideBlockedLinks = result.hideBlockedLinks;
+                this.hideBlockedCheckbox.checked = this.hideBlockedLinks;
             }
         } catch (error) {
             console.error('加载设置失败:', error);
@@ -305,7 +311,8 @@ class LinkManager {
         try {
             await chrome.storage.local.set({
                 autoMoveOpened: this.autoMoveOpened,
-                hideOpenedLinks: this.hideOpenedLinks
+                hideOpenedLinks: this.hideOpenedLinks,
+                hideBlockedLinks: this.hideBlockedLinks
             });
         } catch (error) {
             console.error('保存设置失败:', error);
@@ -363,6 +370,12 @@ class LinkManager {
         });
         this.hideOpenedCheckbox.addEventListener('change', (e) => {
             this.hideOpenedLinks = e.target.checked;
+            this.saveSettings();
+            this.selectedUrls.clear();
+            this.updateUI();
+        });
+        this.hideBlockedCheckbox.addEventListener('change', (e) => {
+            this.hideBlockedLinks = e.target.checked;
             this.saveSettings();
             this.selectedUrls.clear();
             this.updateUI();
@@ -1330,7 +1343,9 @@ class LinkManager {
 
     getFilteredLinks() {
         let filtered = this.links;
-        filtered = filtered.filter(link => !this.isUrlBlocked(link.url));
+        if (this.hideBlockedLinks) {
+            filtered = filtered.filter(link => !this.isUrlBlocked(link.url));
+        }
         if (this.hideOpenedLinks) {
             filtered = filtered.filter(link => !this.openedLinks.has(link.url));
         }
@@ -1395,7 +1410,7 @@ class LinkManager {
         if (totalFiltered === 0) {
             if (this.searchQuery) {
                 return `<div class="empty-state">没有找到匹配 "<strong>${this.searchQuery}</strong>" 的链接</div>`;
-            } else if (this.hideOpenedLinks) {
+            } else if (this.hideOpenedLinks || this.hideBlockedLinks) {
                 return '<div class="empty-state">所有链接已打开或已隐藏</div>';
             } else {
                 return '<div class="empty-state">没有找到链接</div>';
