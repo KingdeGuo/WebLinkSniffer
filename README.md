@@ -2,6 +2,10 @@
 
 一个用于获取当前网页中所有超链接的浏览器插件和油猴脚本，支持智能排序、链接去重、分页展示、缓存管理和批量打开功能。
 
+🌍 **现已支持多语言** | **Now supports Multiple Languages**
+- 🇨🇳 简体中文
+- 🇬🇧 English
+
 **支持两种安装方式**：
 - 🔌 浏览器扩展（Chrome/Edge）- 原生集成，性能最佳
 - 🐱 油猴脚本 - 轻量级方案，无需修改浏览器配置
@@ -39,6 +43,13 @@
 ├── content.js            # 内容脚本（获取页面链接）
 ├── options.html          # 配置页面 HTML
 ├── options.js            # 配置页面逻辑
+├── i18n.js               # 浏览器插件国际化工具
+├── tampermonkey_i18n.js  # 油猴脚本国际化工具
+├── _locales/             # 翻译文件
+│   ├── zh_CN/            # 简体中文翻译
+│   │   └── messages.json
+│   └── en/               # 英文翻译
+│       └── messages.json
 ├── icons/                # 插件图标
 │   ├── icon16.png
 │   ├── icon48.png
@@ -53,7 +64,12 @@
 │   ├── CONFIG_FEATURE_SUMMARY.md
 │   ├── LINK_DEDUP_SUMMARY.md
 │   ├── OPTIMIZATION_SUMMARY.md
+│   ├── I18N_GUIDE.md              # 国际化集成指南
+│   ├── I18N_MIGRATION_CHECKLIST.md # 国际化迁移清单
 │   └── style-preview.html
+├── examples/             # 代码示例
+│   ├── popup_i18n.html   # HTML 国际化示例
+│   └── popup_i18n.js     # JavaScript 国际化示例
 ├── .gitignore
 ├── LICENSE
 ├── CHANGELOG.md
@@ -106,6 +122,24 @@
 3. **使用方法**：
    - 访问任何网站后，右上角会出现 🔗 浮动按钮
    - 点击按钮打开链接管理器
+
+## 语言支持
+
+### 🌐 支持的语言
+- **简体中文** (Chinese) - 完全支持
+- **English** - 完全支持
+
+### 🔄 语言自动检测
+- **浏览器插件版**：根据浏览器 UI 语言自动选择（偏好设置优先）
+- **油猴脚本版**：根据浏览器语言自动选择（脚本存储优先）
+
+### 🔧 手动切换语言
+在插件弹出窗口或配置页面的右上角可以看到语言选择器，点击即可切换语言。
+
+### 📖 国际化文档
+- [详细集成指南](docs/I18N_GUIDE.md) - 如何在现有项目中集成 i18n
+- [迁移检查清单](docs/I18N_MIGRATION_CHECKLIST.md) - 逐步迁移指南
+- [代码示例](examples/) - 集成示例代码
 
 ## 使用方法
 
@@ -166,16 +200,38 @@
 
 ## 技术实现
 
+### 国际化 (i18n) 架构
+
+#### 浏览器插件
+- **翻译存储**：Chrome 标准 `_locales/` 目录结构
+- **运行时 API**：`chrome.i18n.getMessage()`
+- **语言检测**：`chrome.i18n.getUILanguage()`
+- **工具模块**：`i18n.js` - 统一封装，提供模板替换支持
+- **使用方式**：HTML `data-i18n` 属性 或 JavaScript `I18n.t()`
+
+#### 油猴脚本
+- **翻译存储**：内嵌 `tampermonkey_i18n.js`
+- **持久化**：`GM_setValue()` / `GM_getValue()`
+- **语言检测**：`navigator.language`
+- **工具类**：`TampermonkeyI18n` - 独立使用
+
 ### 浏览器插件版本
 
 **核心组件**：
-1. **manifest.json** - 扩展配置文件
+1. **manifest.json** - 扩展配置文件（含 i18n）
 2. **content.js** - 内容脚本，注入到网页中获取链接
 3. **popup.html/popup.js** - 弹出界面和逻辑
 4. **options.html/options.js** - 设置页面
-5. **icons/** - 插件图标资源
+5. **i18n.js** - 国际化工具模块
+6. **_locales/** - 翻译文件（支持 zh_CN, en）
+7. **icons/** - 插件图标资源
 
 **数据存储**：使用 Chrome Storage API (`chrome.storage.local`) 保存用户数据
+
+**国际化支持**：
+- 自动检测浏览器 UI 语言
+- 支持手动语言切换
+- localStorage 保存语言偏好
 
 **兼容性**：Chrome 88+，Edge 88+（Manifest V3）
 
@@ -185,16 +241,24 @@
 
 **核心特性**：
 - 使用 GM API (Tampermonkey 提供的 API) 进行数据持久化
-- `GM_setValue`/`GM_getValue` 存储配置和缓存数据
+- `GM_setValue`/`GM_getValue` 存储配置、缓存数据和语言选择
 - `GM_addStyle` 动态注入样式
-- 在文档加载完成后运行（`@run-at    document-end`）
+- 在文档加载完成后运行（`@run-at document-end`）
+- 内嵌 `tampermonkey_i18n.js` 提供国际化支持
 
 **工作原理**：
 1. 页面加载完成后，脚本创建一个浮动按钮 🔗
-2. 用户点击按钮打开链接管理器
-3. 管理器扫描页面中的所有 `<a>` 标签并进行去重、排序
-4. 支持实时搜索、过滤、屏蔽等操作
-5. 所有数据保存到本地存储
+2. 自动检测浏览器语言或使用保存的语言设置
+3. 用户点击按钮打开链接管理器（显示对应语言的界面）
+4. 管理器扫描页面中的所有 `<a>` 标签并进行去重、排序
+5. 支持实时搜索、过滤、屏蔽等操作
+6. 所有数据保存到本地存储
+
+**国际化支持**：
+- 内嵌多语言翻译
+- 自动检测浏览器语言
+- 手动语言切换
+- 使用 `i18n.t()` 获取翻译
 
 **支持浏览器**：
 - Chrome + Tampermonkey

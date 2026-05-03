@@ -2,6 +2,94 @@
 
 本文档记录「网址获取」浏览器插件的所有重要变更。
 
+## [2.0.0] - 2026-05-03
+
+### 🌍 新增国际化 (i18n) 支持
+
+#### 浏览器插件版本
+- ✨ **翻译文件支持**：添加 `_locales/` 目录，包含中文(zh_CN)和英文(en)翻译
+  * 50+ 个用户界面消息的完整翻译
+  * 符合 Chrome Extension i18n 标准
+- 🛠️ **国际化工具** (`i18n.js`)：
+  * Chrome Native API 集成（`chrome.i18n.getMessage`）
+  * 自动语言检测（基于浏览器 UI 语言）
+  * 本地存储语言偏好设置
+  * 支持带参数的动态翻译（如分页信息）
+  * 优雅降级处理（翻译缺失时显示消息键）
+- 📝 **HTML 集成** (`data-i18n` 属性)：
+  * 简洁的模板语法
+  * 自动国际化 DOM 元素
+- 🎯 **JavaScript 集成**：
+  * `I18n.t(key)` 获取翻译
+  * `I18n.t(key, {param: value})` 参数替换
+  * `I18n.setLanguage(lang)` 手动切换语言
+  * `I18n.getLanguage()` 获取当前语言
+- 🔧 **manifest.json 更新**：
+  * 添加 `"default_locale": "en"`
+  * 插件名称和描述使用 `__MSG_*__` 形式
+
+#### 油猴脚本版本
+- ✨ **内嵌国际化支持** (`tampermonkey_i18n.js`)：
+  * 支持中文(zh_CN)和英文(en)
+  * 完全独立，无需外部文件
+  * 性能最优化
+- 📦 **Tampermonkey 存储集成**：
+  * 使用 `GM_setValue`/`GM_getValue` 持久化语言选择
+  * 跨浏览器会话保存用户偏好
+- 🌐 **浏览器语言检测**：
+  * 自动检测 `navigator.language`
+  * 支持多种语言变体识别
+- 🎯 **API 设计**：
+  * 清晰的 `TampermonkeyI18n` 类接口
+  * `i18n.t(key, params)` 统一翻译方法
+  * `i18n.setLanguage(lang)` 动态切换
+
+### 📚 完整文档
+- 📖 **[I18N_GUIDE.md](docs/I18N_GUIDE.md)**：
+  * 详细的集成教程
+  * 浏览器插件集成步骤
+  * 油猴脚本集成步骤
+  * 代码示例和最佳实践
+  * 常见问题解答
+- ✅ **[I18N_MIGRATION_CHECKLIST.md](docs/I18N_MIGRATION_CHECKLIST.md)**：
+  * 逐步迁移指南
+  * 6 个阶段的检查清单
+  * 即插即用的示例代码
+  * 测试建议
+  * 后续优化建议
+
+### 💡 示例代码
+- 🔗 **[examples/popup_i18n.html](examples/popup_i18n.html)**：
+  * 完整的国际化 HTML 示例
+  * 展示 `data-i18n` 属性用法
+  * 包含语言选择器UI
+- ⚙️  **[examples/popup_i18n.js](examples/popup_i18n.js)**：
+  * 国际化的 JavaScript 示例
+  * LinkManager 类的 i18n 集成
+  * 事件处理的翻译集成
+
+### 📝 README 更新
+- 🌍 在标题中明确标注 "now supports multiple languages"
+- 📚 新增 "支持的语言" 部分
+  * 列出所有支持的语言
+  * 说明自动检测和手动切换机制
+  * 链接到国际化文档
+- 🔧 更新文件结构说明
+  * 添加 `_locales/` 目录
+  * 添加 `i18n.js` 和 `tampermonkey_i18n.js`
+  * 文档更新
+- 🛠️ 增强技术实现章节
+  * 详细的 i18n 架构说明
+  * 浏览器插件 vs 油猴脚本的对比
+
+### 🎯 下一步
+- 集成现有代码：参考 [I18N_MIGRATION_CHECKLIST.md](docs/I18N_MIGRATION_CHECKLIST.md)
+- 添加更多语言（日语、西班牙语等）
+- 实现 RTL 语言支持
+- 集成众包翻译平台（Crowdin）
+
+---
+
 ## [1.4.1] - 2026-05-03
 
 ### 修复
