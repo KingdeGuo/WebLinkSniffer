@@ -2,10 +2,10 @@ class LinkManager {
     constructor() {
         this.links = [];
         this.openedLinks = new Set();
-        this.filteredUrls = [];       // 按具体 URL 屏蔽
-        this.filteredDomains = [];    // 按域名屏蔽（新增）
-        this.filteredPathPatterns = [];  // 按 URL 路径正则模式屏蔽（新增）
-        this.selectedUrls = new Set(); // 多选集合（新增）
+        this.filteredUrls = [];
+        this.filteredDomains = [];
+        this.filteredPathPatterns = [];
+        this.selectedUrls = new Set();
         this.currentPage = 1;
         this.pageSize = 5;
         this.autoMoveOpened = true;
@@ -19,7 +19,6 @@ class LinkManager {
         this.initializeApp();
     }
 
-    // 初始化应用
     async initializeApp() {
         try {
             await Promise.all([
@@ -61,7 +60,6 @@ class LinkManager {
         this.blockedUrlsBar = document.getElementById('blockedUrlsBar');
         this.blockedUrlsTags = document.getElementById('blockedUrlsTags');
         this.clearBlockedBtn = document.getElementById('clearBlockedBtn');
-        // 批量操作元素
         this.bulkActionsBar = document.getElementById('bulkActionsBar');
         this.selectedCount = document.getElementById('selectedCount');
         this.bulkBlockBtn = document.getElementById('bulkBlockBtn');
@@ -69,8 +67,6 @@ class LinkManager {
         this.bulkCopyBtn = document.getElementById('bulkCopyBtn');
         this.bulkOpenBtn = document.getElementById('bulkOpenBtn');
     }
-
-    // ========== 数据加载 ==========
 
     async loadOpenedLinks() {
         try {
@@ -186,8 +182,6 @@ class LinkManager {
         }
     }
 
-    // ========== 事件监听 ==========
-
     setupEventListeners() {
         this.prevBtn.addEventListener('click', () => this.goToPage(this.currentPage - 1));
         this.nextBtn.addEventListener('click', () => this.goToPage(this.currentPage + 1));
@@ -237,7 +231,6 @@ class LinkManager {
     }
 
     setupBulkEventListeners() {
-        // 批量屏蔽选中链接
         this.bulkBlockBtn.addEventListener('click', () => {
             const urls = Array.from(this.selectedUrls);
             if (urls.length === 0) return;
@@ -255,7 +248,6 @@ class LinkManager {
             });
         });
 
-        // 批量屏蔽域名
         this.bulkBlockDomainBtn.addEventListener('click', () => {
             const urls = Array.from(this.selectedUrls);
             if (urls.length === 0) return;
@@ -278,7 +270,6 @@ class LinkManager {
             });
         });
 
-        // 批量复制
         this.bulkCopyBtn.addEventListener('click', () => {
             const urls = Array.from(this.selectedUrls);
             if (urls.length === 0) return;
@@ -286,7 +277,6 @@ class LinkManager {
             this.copyText(text, `✅ 已复制 ${urls.length} 个链接`);
         });
 
-        // 批量打开
         this.bulkOpenBtn.addEventListener('click', async () => {
             const urls = Array.from(this.selectedUrls);
             if (urls.length === 0) return;
@@ -302,8 +292,6 @@ class LinkManager {
             this.showToast(`🔗 已打开 ${urls.length} 个链接`);
         });
     }
-
-    // ========== 链接获取 ==========
 
     async fetchLinks() {
         this.showLoading();
@@ -394,86 +382,427 @@ class LinkManager {
         this.openAllBtn.disabled = true;
     }
 
-    // ========== 排序 ==========
+    // ========== 顶尖智能排序系统 ==========
 
     sortLinks() {
-        const maxYPosition = this.links.reduce((max, link) =>
-            link.yPosition && link.yPosition > max ? link.yPosition : max, 0);
+        const stats = this.computeLinkStatistics();
+        
+        const scoredLinks = this.links.map(link => ({
+            link,
+            score: this.computeIntelligentScore(link, stats),
+            isOpened: this.openedLinks.has(link.url)
+        }));
 
-        this.links.sort((a, b) => {
-            const aOpened = this.openedLinks.has(a.url);
-            const bOpened = this.openedLinks.has(b.url);
-            if (this.autoMoveOpened && aOpened !== bOpened) return aOpened ? 1 : -1;
-            const scoreDiff = this.getLinkScore(b, maxYPosition) - this.getLinkScore(a, maxYPosition);
-            if (scoreDiff !== 0) return scoreDiff;
-            try {
-                const urlA = new URL(a.url);
-                const urlB = new URL(b.url);
-                const dc = urlA.hostname.localeCompare(urlB.hostname);
-                if (dc !== 0) return dc;
-                const pc = urlA.pathname.localeCompare(urlB.pathname);
-                if (pc !== 0) return pc;
-                return urlA.search.localeCompare(urlB.search);
-            } catch (e) {
-                return a.url.localeCompare(b.url);
+        scoredLinks.sort((a, b) => {
+            if (this.autoMoveOpened && a.isOpened !== b.isOpened) {
+                return a.isOpened ? 1 : -1;
             }
+
+            const scoreDiff = b.score - a.score;
+            if (Math.abs(scoreDiff) > 0.1) return scoreDiff;
+
+            return this.fineGrainedCompare(a.link, b.link, stats);
         });
+
+        this.links = scoredLinks.map(item => item.link);
+        
+        if (window.location.hash.includes('debug')) {
+            console.table(scoredLinks.slice(0, 10).map((item, i) => ({
+                rank: i + 1,
+                title: item.link.title?.substring(0, 40),
+                score: item.score.toFixed(2),
+                isOpened: item.isOpened
+            })));
+        }
     }
 
-    getLinkScore(link, maxYPosition) {
+    computeLinkStatistics() {
+        const stats = {
+            maxYPosition: 0,
+            domainCounts: new Map(),
+            pathDepths: [],
+            contentAreaLinks: 0,
+            hasTitleCount: 0,
+            avgTitleLength: 0,
+            urlPatterns: new Map()
+        };
+
+        let totalTitleLength = 0;
+
+        this.links.forEach(link => {
+            if (link.yPosition > stats.maxYPosition) {
+                stats.maxYPosition = link.yPosition;
+            }
+
+            try {
+                const domain = new URL(link.url).hostname;
+                stats.domainCounts.set(domain, (stats.domainCounts.get(domain) || 0) + 1);
+            } catch (e) {}
+
+            if (link.isContentArea) stats.contentAreaLinks++;
+
+            const title = (link.title || '').trim();
+            if (title && !title.startsWith('http')) {
+                stats.hasTitleCount++;
+                totalTitleLength += title.length;
+            }
+
+            try {
+                const depth = new URL(link.url).pathname.split('/').filter(Boolean).length;
+                stats.pathDepths.push(depth);
+            } catch (e) {}
+        });
+
+        stats.avgTitleLength = stats.hasTitleCount > 0 ? 
+            totalTitleLength / stats.hasTitleCount : 0;
+
+        return stats;
+    }
+
+    computeIntelligentScore(link, stats) {
         let score = 0;
-        if (!this.openedLinks.has(link.url)) score += 200;
-        if (this.isSameDomain(link.url)) score += 40;
-        if (maxYPosition > 0 && link.yPosition !== undefined && link.yPosition >= 0) {
-            const normalizedY = link.yPosition / maxYPosition;
-            if (normalizedY < 0.15) score += 30;
-            else if (normalizedY < 0.3) score += 25;
-            else if (normalizedY < 0.5) score += 18;
-            else if (normalizedY < 0.7) score += 10;
-            else score += 3;
+        const weights = {
+            freshness: 150,
+            relevance: 100,
+            authority: 80,
+            quality: 70,
+            position: 60,
+            semantic: 50,
+            engagement: 40
+        };
+
+        if (!this.openedLinks.has(link.url)) {
+            score += weights.freshness;
+            try {
+                const domain = new URL(link.url).hostname;
+                if (stats.domainCounts.get(domain) === 1) {
+                    score += 20;
+                }
+            } catch (e) {}
         }
-        if (link.isContentArea) score += 25;
-        score += this.getTitleScore(link.title || link.url);
+
+        score += this.calculateRelevanceScore(link, stats) * (weights.relevance / 100);
+        score += this.calculateAuthorityScore(link, stats) * (weights.authority / 100);
+        score += this.calculateQualityScore(link, stats) * (weights.quality / 100);
+        score += this.calculatePositionScore(link, stats) * (weights.position / 100);
+        score += this.calculateSemanticScore(link) * (weights.semantic / 100);
+        score += this.calculateEngagementScore(link) * (weights.engagement / 100);
+
+        if (this.isSameDomain(link.url)) {
+            score += 25;
+        }
+
+        return score;
+    }
+
+    calculateRelevanceScore(link, stats) {
+        let score = 0;
+        
         try {
             const urlObj = new URL(link.url);
-            const depth = urlObj.pathname.split('/').filter(Boolean).length;
-            score += Math.max(0, 12 - depth) * 4;
-            const params = new URLSearchParams(urlObj.search);
-            const paramCount = Array.from(params.keys()).length;
-            const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
-                'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ref', 'source', 'tracking',
-                'gbraid', 'wbraid', 'twclid', 'igshid'];
-            const trackingCount = Array.from(params.keys()).filter(k =>
-                trackingParams.includes(k.toLowerCase())).length;
-            score += Math.max(0, 5 - (paramCount - trackingCount)) * 3;
-            score -= trackingCount * 6;
-            if (!urlObj.search) score += 8;
             const pathLower = urlObj.pathname.toLowerCase();
-            if (/\/(article|post|blog|news|story|read|p|entry|detail|content|202\d|20[12]\d)\//.test(pathLower) ||
-                /\/[a-z0-9]+[-_][a-z0-9]+[-_][a-z0-9]+/.test(pathLower)) {
-                score += 15;
+            
+            const highValuePatterns = [
+                { pattern: /\/(article|post|story|read|content|detail|view)\//i, weight: 25 },
+                { pattern: /\/(blog|news|magazine|journal)\//i, weight: 20 },
+                { pattern: /\/(tutorial|guide|howto|docs|documentation)\//i, weight: 22 },
+                { pattern: /\/(research|paper|study|analysis|report)\//i, weight: 24 },
+                { pattern: /\/(about|intro|overview|summary)\//i, weight: 15 },
+                { pattern: /\/(202[0-9]|20[0-9]{3})\//, weight: 18 },
+                { pattern: /\/[a-z0-9]+([-_.][a-z0-9]+){2,}/i, weight: 16 }
+            ];
+
+            for (const { pattern, weight } of highValuePatterns) {
+                if (pattern.test(pathLower)) {
+                    score += weight;
+                    break;
+                }
             }
-        } catch (e) { /* ignore */ }
-        return score;
+
+            const ext = pathLower.split('.').pop();
+            const valuableExtensions = {
+                'html': 5, 'htm': 5, '': 5,
+                'pdf': 12,
+                'md': 10,
+            };
+            if (valuableExtensions[ext]) {
+                score += valuableExtensions[ext];
+            }
+
+            const params = new URLSearchParams(urlObj.search);
+            const usefulParams = ['id', 'page', 'category', 'tag', 'q', 'search'];
+            const hasUsefulParams = Array.from(params.keys()).some(k => 
+                usefulParams.some(up => k.toLowerCase().includes(up))
+            );
+            if (hasUsefulParams) score += 8;
+
+        } catch (e) {}
+
+        return Math.min(score, 100);
     }
 
-    getTitleScore(title) {
-        const normalized = (title || '').trim();
-        if (!normalized || normalized.startsWith('http') || normalized.includes('://')) return 2;
-        const wordCount = normalized.split(/\s+/).length;
-        const charCount = normalized.length;
+    calculateAuthorityScore(link, stats) {
+        let score = 50;
+
+        try {
+            const urlObj = new URL(link.url);
+            
+            const pathDepth = urlObj.pathname.split('/').filter(Boolean).length;
+            score += Math.max(0, 8 - pathDepth) * 5;
+
+            if (!urlObj.search) {
+                score += 15;
+            } else {
+                const params = new URLSearchParams(urlObj.search);
+                const paramCount = Array.from(params.keys()).length;
+                
+                if (paramCount <= 2) {
+                    score += 5;
+                } else {
+                    score -= (paramCount - 2) * 3;
+                }
+
+                const trackingParams = [
+                    'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+                    'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid',
+                    'ref', 'source', 'tracking', 'gbraid', 'wbraid', 'twclid', 'igshid',
+                    'si', 'feature', 't', 's', 'affiliate', 'partner'
+                ];
+                const trackingCount = Array.from(params.keys()).filter(k => 
+                    trackingParams.includes(k.toLowerCase())
+                ).length;
+                score -= trackingCount * 8;
+            }
+
+            if (urlObj.protocol === 'https:') {
+                score += 10;
+            }
+
+            const domainCount = stats.domainCounts.get(urlObj.hostname) || 1;
+            if (domainCount >= 3) {
+                score += 10;
+            }
+
+        } catch (e) {}
+
+        return Math.max(0, Math.min(score, 100));
+    }
+
+    calculateQualityScore(link, stats) {
         let score = 0;
-        if (wordCount >= 3 && charCount >= 15 && charCount <= 80) score += 30;
-        else if (wordCount >= 2 && charCount >= 10 && charCount <= 80) score += 20;
-        else if (charCount > 80) score += 10;
-        else score += 5;
-        if (/[\u4e00-\u9fa5]/.test(normalized) || /[a-zA-Z]/.test(normalized)) score += 10;
-        if (/^[\d\s\-\|\.\,\;\:\!\?\(\)\[\]\{\}\#\@\$\^&\*\+\=\/\\`~]+$/.test(normalized)) score -= 10;
-        if (/^(更多|more|learn more|read more|点击|click|here|这里|详情|detail|查看)$/i.test(normalized)) score -= 15;
+
+        if (link.isContentArea) {
+            score += 30;
+        }
+
+        if (link.textLength) {
+            if (link.textLength >= 10 && link.textLength <= 100) {
+                score += 15;
+            } else if (link.textLength > 100) {
+                score += 8;
+            }
+        }
+
+        if (link.contextQuality) {
+            score += link.contextQuality * 20;
+        }
+
+        if (link.elementSize) {
+            const { width, height } = link.elementSize;
+            const area = width * height;
+            if (area > 5000 && area < 50000) {
+                score += 10;
+            }
+        }
+
+        return Math.min(score, 100);
+    }
+
+    calculatePositionScore(link, stats) {
+        let score = 0;
+
+        if (stats.maxYPosition > 0 && link.yPosition !== undefined && link.yPosition >= 0) {
+            const normalizedY = link.yPosition / stats.maxYPosition;
+
+            if (normalizedY < 0.1) {
+                score = 35;
+            } else if (normalizedY < 0.25) {
+                score = 30;
+            } else if (normalizedY < 0.4) {
+                score = 25;
+            } else if (normalizedY < 0.6) {
+                score = 18;
+            } else if (normalizedY < 0.8) {
+                score = 12;
+            } else {
+                score = 6;
+            }
+
+            if (link.xPosition !== undefined) {
+                const normalizedX = link.xPosition / (link.viewportWidth || 1200);
+                if (normalizedX < 0.33) {
+                    score += 5;
+                }
+            }
+        }
+
         return score;
     }
 
-    // ========== 域名/URL 辅助方法 ==========
+    calculateSemanticScore(link) {
+        const title = (link.title || '').trim();
+        const anchorText = (link.anchorText || '').trim();
+        
+        const bestText = this.selectBestText(title, anchorText, link.url);
+        
+        let score = this.analyzeTextQuality(bestText);
+
+        if (title && anchorText && title !== anchorText) {
+            const similarity = this.calculateTextSimilarity(title, anchorText);
+            if (similarity > 0.5) {
+                score += 10;
+            }
+        }
+
+        return Math.min(score, 100);
+    }
+
+    selectBestText(title, anchorText, url) {
+        const titleQuality = this.getTextQualityMetrics(title);
+        const anchorQuality = this.getTextQualityMetrics(anchorText);
+
+        if (titleQuality.score > anchorQuality.score * 1.2) {
+            return title;
+        } else if (anchorQuality.score > titleQuality.score * 1.2) {
+            return anchorText;
+        }
+        
+        return title.length > anchorText.length ? title : anchorText;
+    }
+
+    getTextQualityMetrics(text) {
+        if (!text || text.trim().length === 0) {
+            return { score: 0, length: 0, wordCount: 0 };
+        }
+
+        const normalized = text.trim();
+        const length = normalized.length;
+        const wordCount = normalized.split(/\s+/).length;
+        
+        let score = 0;
+        
+        if (length >= 15 && length <= 80) score += 30;
+        else if (length >= 10 && length <= 120) score += 20;
+        else if (length > 5) score += 10;
+
+        if (wordCount >= 3 && wordCount <= 12) score += 20;
+        else if (wordCount >= 2) score += 10;
+
+        if (/[\u4e00-\u9fa5a-zA-Z]/.test(normalized)) score += 15;
+
+        if (!normalized.startsWith('http') && !normalized.includes('://')) score += 15;
+
+        return { score, length, wordCount };
+    }
+
+    analyzeTextQuality(text) {
+        const metrics = this.getTextQualityMetrics(text);
+        let score = metrics.score;
+
+        const normalized = text.trim().toLowerCase();
+
+        const negativePatterns = [
+            { pattern: /^(更多|more|learn more|read more|点击|click|here|这里|详情|detail|查看|link|url)$/i, penalty: 20 },
+            { pattern: /^(下一页|上一页|prev|next|»|«|>>|<<)$/i, penalty: 15 },
+            { pattern: /^(分享|share|收藏|favorite|打印|print)$/i, penalty: 12 },
+            { pattern: /^(广告|ad|sponsored|推广|promotion)$/i, penalty: 25 },
+            { pattern: /^[\d\s\-|.,;:!?()[\]{}#@$^&*+=/\\`~]+$/, penalty: 15 },
+        ];
+
+        for (const { pattern, penalty } of negativePatterns) {
+            if (pattern.test(normalized)) {
+                score -= penalty;
+                break;
+            }
+        }
+
+        const positivePatterns = [
+            { pattern: /(如何|how to|教程|guide|方法|way to)/i, bonus: 10 },
+            { pattern: /(最佳|best|top|优秀|great)/i, bonus: 8 },
+            { pattern: /(完整|complete|全面|comprehensive)/i, bonus: 8 },
+            { pattern: /(免费|free|开源|open source)/i, bonus: 6 },
+            { pattern: /(202[4-9]|最新|latest|new)/i, bonus: 10 },
+        ];
+
+        for (const { pattern, bonus } of positivePatterns) {
+            if (pattern.test(normalized)) {
+                score += bonus;
+            }
+        }
+
+        return Math.max(0, Math.min(score, 100));
+    }
+
+    calculateTextSimilarity(text1, text2) {
+        const words1 = new Set(text1.toLowerCase().split(/\W+/).filter(w => w.length > 2));
+        const words2 = new Set(text2.toLowerCase().split(/\W+/).filter(w => w.length > 2));
+        
+        const intersection = new Set([...words1].filter(w => words2.has(w)));
+        const union = new Set([...words1, ...words2]);
+        
+        return union.size > 0 ? intersection.size / union.size : 0;
+    }
+
+    calculateEngagementScore(link) {
+        let score = 50;
+
+        if (link.isFeatured || link.isHighlighted) {
+            score += 20;
+        }
+
+        if (link.hasImage || link.isImageLink) {
+            score += 10;
+        }
+
+        if (link.socialSignals) {
+            score += Math.min(link.socialSignals * 5, 20);
+        }
+
+        if (link.hasHoverEffect) {
+            score += 5;
+        }
+
+        return Math.min(score, 100);
+    }
+
+    fineGrainedCompare(linkA, linkB, stats) {
+        try {
+            const urlA = new URL(linkA.url);
+            const urlB = new URL(linkB.url);
+
+            const isSameDomainA = this.isSameDomain(linkA.url);
+            const isSameDomainB = this.isSameDomain(linkB.url);
+            if (isSameDomainA !== isSameDomainB) {
+                return isSameDomainA ? -1 : 1;
+            }
+
+            const depthA = urlA.pathname.split('/').filter(Boolean).length;
+            const depthB = urlB.pathname.split('/').filter(Boolean).length;
+            if (depthA !== depthB) return depthA - depthB;
+
+            const paramsA = new URLSearchParams(urlA.search).toString().length;
+            const paramsB = new URLSearchParams(urlB.search).toString().length;
+            if (paramsA !== paramsB) return paramsA - paramsB;
+
+            const domainCompare = urlA.hostname.localeCompare(urlB.hostname);
+            if (domainCompare !== 0) return domainCompare;
+
+            return urlA.pathname.localeCompare(urlB.pathname);
+
+        } catch (e) {
+            return linkA.url.localeCompare(linkB.url);
+        }
+    }
 
     isSameDomain(url) {
         if (!this.currentPageUrl) return false;
@@ -492,7 +821,6 @@ class LinkManager {
         }
     }
 
-    // 检查 URL 是否被屏蔽（精确匹配 或 域名匹配 或 路径模式匹配）
     isUrlBlocked(url) {
         if (this.filteredUrls.includes(url)) return true;
         const domain = this.getDomainFromUrl(url);
@@ -507,26 +835,23 @@ class LinkManager {
                         if (regex.test(pathAndQuery) || regex.test(urlObj.pathname)) {
                             return true;
                         }
-                    } catch (e) { /* 无效正则跳过 */ }
+                    } catch (e) {}
                 }
-            } catch (e) { /* ignore */ }
+            } catch (e) {}
         }
         return false;
     }
 
-    // 检查域名是否被屏蔽
     isDomainBlocked(url) {
         const domain = this.getDomainFromUrl(url);
         return domain && this.filteredDomains.includes(domain);
     }
 
-    // 从 URL 提取路径模式（例如 /blog/some-post → /blog/）
     extractPathPattern(url) {
         try {
             const urlObj = new URL(url);
             const parts = urlObj.pathname.split('/').filter(Boolean);
             if (parts.length >= 1) {
-                // 提取第一段路径作为模式（例如 /blog/）
                 return '/' + parts[0] + '/';
             }
             return null;
@@ -535,11 +860,8 @@ class LinkManager {
         }
     }
 
-    // ========== 过滤与统计 ==========
-
     getFilteredLinks() {
         let filtered = this.links;
-        // 过滤已屏蔽的链接（精确URL、域名、路径模式）
         filtered = filtered.filter(link => !this.isUrlBlocked(link.url));
         if (this.hideOpenedLinks) {
             filtered = filtered.filter(link => !this.openedLinks.has(link.url));
@@ -555,7 +877,6 @@ class LinkManager {
     }
 
     calculateStats() {
-        // 统计已被屏蔽的链接数量
         let blockedCount = 0;
         this.links.forEach(link => {
             if (this.isUrlBlocked(link.url)) blockedCount++;
@@ -577,8 +898,6 @@ class LinkManager {
         this.updatePagination();
         this.updateBulkActionsBar();
     }
-
-    // ========== 渲染链接列表 ==========
 
     renderLinks() {
         const filteredLinks = this.getFilteredLinks();
@@ -622,7 +941,6 @@ class LinkManager {
         div.className = `link-item ${isOpened ? 'link-opened' : ''} ${isSelected ? 'selected' : ''}`;
         div.dataset.url = link.url;
 
-        // 多选 checkbox
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.className = 'link-checkbox-bulk';
@@ -649,7 +967,6 @@ class LinkManager {
         contentDiv.appendChild(title);
         contentDiv.appendChild(urlEl);
 
-        // 点击内容区域打开链接
         contentDiv.addEventListener('click', () => {
             this.openLink(link.url);
             if (!this.openedLinks.has(link.url)) {
@@ -660,11 +977,9 @@ class LinkManager {
         div.appendChild(checkbox);
         div.appendChild(contentDiv);
 
-        // 操作按钮组
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'link-actions';
 
-        // 复制按钮
         const copyBtn = document.createElement('button');
         copyBtn.className = 'link-action-btn copy-btn';
         copyBtn.title = '复制链接';
@@ -674,7 +989,6 @@ class LinkManager {
             this.copyLink(link.url);
         });
 
-        // 屏蔽此链接按钮
         const blockBtn = document.createElement('button');
         blockBtn.className = `link-action-btn block-btn${isBlocked ? ' blocked' : ''}`;
         blockBtn.title = isBlocked ? '已屏蔽' : '屏蔽此链接';
@@ -686,7 +1000,6 @@ class LinkManager {
             });
         }
 
-        // 屏蔽域名按钮
         const domainBlockBtn = document.createElement('button');
         const domainBlocked = this.isDomainBlocked(link.url);
         domainBlockBtn.className = `link-action-btn domain-block-btn${domainBlocked ? ' blocked' : ''}`;
@@ -699,7 +1012,6 @@ class LinkManager {
             });
         }
 
-        // 屏蔽路径模式按钮（新增 🔗）
         const pathBlockBtn = document.createElement('button');
         const pathPattern = this.extractPathPattern(link.url);
         const pathBlocked = pathPattern && this.filteredPathPatterns.includes(pathPattern);
@@ -722,8 +1034,6 @@ class LinkManager {
         return div;
     }
 
-    // ========== 多选逻辑 ==========
-
     toggleSelectUrl(url, selected) {
         if (selected) {
             this.selectedUrls.add(url);
@@ -732,7 +1042,6 @@ class LinkManager {
         }
         this.updateBulkActionsBar();
 
-        // 更新当前 DOM 中对应项的高亮
         const itemEl = this.linksContainer.querySelector(`[data-url="${CSS.escape(url)}"]`);
         if (itemEl) {
             if (selected) {
@@ -752,8 +1061,6 @@ class LinkManager {
             this.selectedCount.textContent = `已选 ${count} 项`;
         }
     }
-
-    // ========== 链接操作 ==========
 
     async toggleLinkOpened(url, opened) {
         if (opened) {
@@ -814,8 +1121,6 @@ class LinkManager {
         }
     }
 
-    // ========== 复制 ==========
-
     async copyLink(url) {
         await this.copyText(url, '✅ 已复制链接到剪贴板');
     }
@@ -842,8 +1147,6 @@ class LinkManager {
         }
     }
 
-    // ========== 屏蔽链接（精确 URL） ==========
-
     async blockLink(url, blockBtn) {
         if (this.filteredUrls.includes(url)) {
             this.showToast('该链接已在屏蔽列表中');
@@ -864,8 +1167,6 @@ class LinkManager {
         this.showToastWithUndo(`🚫 已屏蔽链接`, () => this.undoBlockUrl(url));
         this.updateUI();
     }
-
-    // ========== 屏蔽域名（新增 🌐） ==========
 
     async blockDomainFromUrl(url, btn) {
         const domain = this.getDomainFromUrl(url);
@@ -890,11 +1191,9 @@ class LinkManager {
         this.updateBlockedUrlsBar();
         this.calculateStats();
         this.showToastWithUndo(`🌐 已屏蔽域名: ${domain}`, () => this.undoBlockDomain(domain));
-        // 移除该域名下所有链接
         this.updateUI();
     }
 
-    // 移除域名被封的所有链接
     removeBlockedDomainFromView(domain) {
         const before = this.links.length;
         this.links = this.links.filter(link => {
@@ -904,14 +1203,12 @@ class LinkManager {
         this.updateUI();
     }
 
-    // 从视图中移除已屏蔽的链接
     removeBlockedLinkFromView(url) {
         this.links = this.links.filter(link => link.url !== url);
         this.currentPage = 1;
         this.updateUI();
     }
 
-    // 批量移除已屏蔽的链接
     removeBlockedLinksFromView(urls) {
         const urlSet = new Set(urls);
         this.links = this.links.filter(link => !urlSet.has(link.url));
@@ -919,7 +1216,6 @@ class LinkManager {
         this.updateUI();
     }
 
-    // 撤销屏蔽链接
     async undoBlockUrl(url) {
         const index = this.filteredUrls.indexOf(url);
         if (index > -1) {
@@ -932,7 +1228,6 @@ class LinkManager {
         }
     }
 
-    // 屏蔽路径模式（新增 🔗）
     async blockPathPatternFromUrl(url, btn) {
         const pattern = this.extractPathPattern(url);
         if (!pattern) {
@@ -963,7 +1258,6 @@ class LinkManager {
         this.updateUI();
     }
 
-    // 移除被路径模式屏蔽的链接
     removeBlockedPathPatternFromView(pattern) {
         try {
             const regex = new RegExp(pattern, 'i');
@@ -973,12 +1267,11 @@ class LinkManager {
                     return !regex.test(urlObj.pathname + urlObj.search) && !regex.test(urlObj.pathname);
                 } catch (e) { return true; }
             });
-        } catch (e) { /* 无效正则，不移除 */ }
+        } catch (e) {}
         this.currentPage = 1;
         this.updateUI();
     }
 
-    // 移除单个路径模式屏蔽
     async removeBlockedPathPattern(pattern) {
         const index = this.filteredPathPatterns.indexOf(pattern);
         if (index > -1) {
@@ -991,7 +1284,6 @@ class LinkManager {
         }
     }
 
-    // 撤销屏蔽路径模式
     async undoBlockPathPattern(pattern) {
         const index = this.filteredPathPatterns.indexOf(pattern);
         if (index > -1) {
@@ -1004,7 +1296,6 @@ class LinkManager {
         }
     }
 
-    // 撤销屏蔽域名
     async undoBlockDomain(domain) {
         const index = this.filteredDomains.indexOf(domain);
         if (index > -1) {
@@ -1017,7 +1308,6 @@ class LinkManager {
         }
     }
 
-    // 移除单个屏蔽链接
     async removeBlockedUrl(url) {
         const index = this.filteredUrls.indexOf(url);
         if (index > -1) {
@@ -1030,7 +1320,6 @@ class LinkManager {
         }
     }
 
-    // 移除单个屏蔽域名
     async removeBlockedDomain(domain) {
         const index = this.filteredDomains.indexOf(domain);
         if (index > -1) {
@@ -1043,8 +1332,6 @@ class LinkManager {
         }
     }
 
-    // ========== 屏蔽栏更新（同时显示 URL 和域名） ==========
-
     updateBlockedUrlsBar() {
         const totalBlocked = this.filteredUrls.length + this.filteredDomains.length + this.filteredPathPatterns.length;
         if (totalBlocked === 0) {
@@ -1054,7 +1341,6 @@ class LinkManager {
         this.blockedUrlsBar.style.display = 'block';
         this.blockedUrlsTags.innerHTML = '';
 
-        // 显示路径模式屏蔽
         this.filteredPathPatterns.forEach(pattern => {
             const tag = document.createElement('span');
             tag.className = 'blocked-tag path-tag';
@@ -1065,7 +1351,6 @@ class LinkManager {
             this.blockedUrlsTags.appendChild(tag);
         });
 
-        // 显示屏蔽的域名
         this.filteredDomains.forEach(domain => {
             const tag = document.createElement('span');
             tag.className = 'blocked-tag domain-tag';
@@ -1076,7 +1361,6 @@ class LinkManager {
             this.blockedUrlsTags.appendChild(tag);
         });
 
-        // 显示屏蔽的 URL
         this.filteredUrls.forEach(url => {
             const tag = document.createElement('span');
             tag.className = 'blocked-tag';
@@ -1087,8 +1371,6 @@ class LinkManager {
             this.blockedUrlsTags.appendChild(tag);
         });
     }
-
-    // ========== Toast 通知系统 ==========
 
     showToast(message, isError = false) {
         this.toast.innerHTML = message;
@@ -1120,7 +1402,6 @@ class LinkManager {
     }
 }
 
-// 初始化应用
 document.addEventListener('DOMContentLoaded', () => {
     new LinkManager();
 });
