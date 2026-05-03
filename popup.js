@@ -177,6 +177,7 @@ class LinkManager {
             
             if (response && response.links) {
                 this.links = response.links;
+                this.currentPageUrl = response.pageUrl || '';
                 this.retryCount = 0;
                 
                 if (this.links.length === 0) {
@@ -266,15 +267,109 @@ class LinkManager {
     
     
     sortLinks() {
-        // 将已打开的链接移到末尾
-        if (this.autoMoveOpened) {
-            this.links.sort((a, b) => {
-                const aOpened = this.openedLinks.has(a.url);
-                const bOpened = this.openedLinks.has(b.url);
-                if (aOpened && !bOpened) return 1;
-                if (!aOpened && bOpened) return -1;
-                return 0;
-            });
+        // 基于价值打分排序，autoMoveOpened 控制是否将已打开链接统一移到末尾
+        this.links.sort((a, b) => {
+            const aOpened = this.openedLinks.has(a.url);
+            const bOpened = this.openedLinks.has(b.url);
+            if (this.autoMoveOpened && aOpened !== bOpened) {
+                return aOpened ? 1 : -1;
+            }
+
+            const scoreDiff = this.getLinkScore(b) - this.getLinkScore(a);
+            if (scoreDiff !== 0) {
+                return scoreDiff;
+            }
+
+            try {
+                const urlA = new URL(a.url);
+                const urlB = new URL(b.url);
+                const domainCompare = urlA.hostname.localeCompare(urlB.hostname);
+                if (domainCompare !== 0) {
+                    return domainCompare;
+                }
+                const pathCompare = urlA.pathname.localeCompare(urlB.pathname);
+                if (pathCompare !== 0) {
+                    return pathCompare;
+                }
+                return urlA.search.localeCompare(urlB.search);
+            } catch (e) {
+                return a.url.localeCompare(b.url);
+            }
+        });
+    }
+    
+    getLinkScore(link) {
+        let score = 0;
+
+        if (!this.openedLinks.has(link.url)) {
+            score += 200;
+        }
+        if (this.isSameDomain(link.url)) {
+            score += 40;
+        }
+
+        const titleScore = this.getTitleScore(link.title || link.url);
+        score += titleScore;
+
+        try {
+            const urlObj = new URL(link.url);
+            const depth = urlObj.pathname.split('/').filter(Boolean).length;
+            score += Math.max(0, 12 - depth) * 4;
+
+            const params = new URLSearchParams(urlObj.search);
+            const paramCount = Array.from(params.keys()).length;
+            score += Math.max(0, 5 - paramCount) * 3;
+
+            if (!urlObj.search) {
+                score += 8;
+            }
+        } catch (e) {
+            score += 0;
+        }
+
+        return score;
+    }
+
+    getTitleScore(title) {
+        const normalized = (title || '').trim();
+        if (!normalized) {
+            return 0;
+        }
+
+        if (normalized.startsWith('http') || normalized.includes('://')) {
+            return 2;
+        }
+
+        const wordCount = normalized.split(/\s+/).length;
+        const charCount = normalized.length;
+        let score = 0;
+
+        if (wordCount >= 3) {
+            score += 20;
+        }
+        if (charCount >= 15 && charCount <= 80) {
+            score += 20;
+        } else if (charCount > 80) {
+            score += 10;
+        }
+
+        if (/[\u4e00-\u9fa5]/.test(normalized) || /[a-zA-Z]/.test(normalized)) {
+            score += 10;
+        }
+
+        return score;
+    }
+
+    isSameDomain(url) {
+        if (!this.currentPageUrl) {
+            return false;
+        }
+        try {
+            const currentHost = new URL(this.currentPageUrl).hostname;
+            const linkHost = new URL(url).hostname;
+            return currentHost === linkHost;
+        } catch (e) {
+            return false;
         }
     }
     

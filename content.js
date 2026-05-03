@@ -2,7 +2,10 @@
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'getLinks') {
         getFilteredLinks().then(links => {
-            sendResponse({ links });
+            sendResponse({
+                links,
+                pageUrl: window.location.href
+            });
         });
         return true; // 保持消息通道开放以支持异步响应
     }
@@ -78,24 +81,26 @@ async function getFilteredLinks() {
     }
 }
 
-// 获取URL的基础部分（去除锚点/hash和查询参数）
+// 获取URL的基础部分（去除锚点/hash，但保留查询参数），用于判断相同页面的不同定位子模块
 function getBaseUrl(url) {
     try {
         const urlObj = new URL(url);
-        // 只返回域名和路径，去除查询参数和锚点
-        return urlObj.origin + urlObj.pathname;
+        urlObj.hash = '';
+        let pathname = urlObj.pathname;
+        if (pathname.endsWith('/') && pathname !== '/') {
+            pathname = pathname.slice(0, -1);
+        }
+        return urlObj.origin + pathname + urlObj.search;
     } catch (e) {
-        // 如果解析失败，尝试简单的字符串处理
         let baseUrl = url;
-        // 先去除锚点
+        // 去除锚点
         const hashIndex = baseUrl.indexOf('#');
         if (hashIndex > -1) {
             baseUrl = baseUrl.substring(0, hashIndex);
         }
-        // 再去除查询参数
-        const queryIndex = baseUrl.indexOf('?');
-        if (queryIndex > -1) {
-            baseUrl = baseUrl.substring(0, queryIndex);
+        // 规范化末尾斜杠
+        if (baseUrl.endsWith('/') && baseUrl !== '/') {
+            baseUrl = baseUrl.slice(0, -1);
         }
         return baseUrl;
     }
