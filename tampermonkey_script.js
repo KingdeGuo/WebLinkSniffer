@@ -472,7 +472,7 @@
         }
 
         createUI() {
-            // 添加CSS样式
+            // 添加CSS样式（包含移动端适配）
             GM_addStyle(`
                 #linkManagerModal {
                     position: fixed;
@@ -512,6 +512,7 @@
                     margin-bottom: 15px;
                     font-size: 14px;
                     color: #666;
+                    flex-wrap: wrap;
                 }
                 .pagination-controls {
                     display: flex;
@@ -558,6 +559,7 @@
                     margin-top: 8px;
                     display: flex;
                     gap: 8px;
+                    flex-wrap: wrap;
                 }
                 .link-btn {
                     padding: 4px 8px;
@@ -591,6 +593,144 @@
                     display: inline-flex;
                     align-items: center;
                     gap: 5px;
+                }
+
+                /* ===== 移动端适配样式 ===== */
+                @media (max-width: 768px) {
+                    .link-manager-container {
+                        width: 96%;
+                        padding: 15px 12px;
+                        max-height: 90vh;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        border-radius: 12px;
+                    }
+                    .link-manager-container h2 {
+                        font-size: 18px;
+                        margin-top: 5px;
+                        margin-bottom: 12px;
+                    }
+                    .controls-bar {
+                        flex-direction: column;
+                        align-items: stretch;
+                        gap: 8px;
+                    }
+                    .controls-bar .pagination-controls {
+                        justify-content: center;
+                    }
+                    .search-box {
+                        width: 100%;
+                        box-sizing: border-box;
+                        font-size: 16px; /* 防止iOS缩放 */
+                        padding: 10px 12px;
+                    }
+                    .pagination-btn {
+                        padding: 10px 16px;
+                        font-size: 14px;
+                        min-height: 44px; /* 触控友好最小高度 */
+                        min-width: 44px;
+                    }
+                    .pagination-controls {
+                        justify-content: center;
+                        width: 100%;
+                    }
+                    .pagination-controls span {
+                        font-size: 14px;
+                        white-space: nowrap;
+                    }
+                    .stats-bar {
+                        font-size: 13px;
+                        gap: 8px;
+                        justify-content: space-around;
+                    }
+                    .link-item {
+                        padding: 12px 10px;
+                    }
+                    .link-title {
+                        font-size: 15px;
+                        line-height: 1.4;
+                    }
+                    .link-url {
+                        font-size: 12px;
+                        line-height: 1.4;
+                    }
+                    .link-actions {
+                        gap: 6px;
+                    }
+                    .link-btn {
+                        padding: 8px 12px;
+                        font-size: 13px;
+                        min-height: 44px; /* 触控友好最小高度 */
+                        flex: 1;
+                        text-align: center;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    .close-btn {
+                        top: 8px;
+                        right: 12px;
+                        font-size: 28px;
+                        padding: 8px;
+                    }
+                    .checkbox-container {
+                        padding: 6px 0;
+                    }
+                    .checkbox-container label {
+                        font-size: 14px;
+                    }
+                    .checkbox-container input[type="checkbox"] {
+                        width: 20px;
+                        height: 20px;
+                    }
+                    #showLinksBtn {
+                        top: 15px;
+                        right: 15px;
+                        width: 44px;
+                        height: 44px;
+                        font-size: 20px;
+                    }
+                }
+
+                /* 小屏手机适配 */
+                @media (max-width: 375px) {
+                    .link-manager-container {
+                        padding: 12px 10px;
+                    }
+                    .link-btn {
+                        padding: 6px 8px;
+                        font-size: 12px;
+                        min-height: 38px;
+                    }
+                    .stats-bar {
+                        font-size: 12px;
+                        flex-direction: column;
+                        align-items: center;
+                        gap: 4px;
+                    }
+                }
+
+                /* 横屏手机适配 */
+                @media (max-height: 500px) and (orientation: landscape) {
+                    .link-manager-container {
+                        max-height: 95vh;
+                        padding: 10px 12px;
+                    }
+                    .link-manager-container h2 {
+                        font-size: 16px;
+                        margin-bottom: 8px;
+                    }
+                    .stats-bar {
+                        margin-bottom: 8px;
+                    }
+                    .controls-bar {
+                        margin-bottom: 8px;
+                    }
+                    .link-item {
+                        padding: 8px;
+                        margin-bottom: 5px;
+                    }
                 }
             `);
 
@@ -707,8 +847,10 @@
             const endIndex = startIndex + this.pageSize;
             const currentPageLinks = this.getDisplayLinks().slice(startIndex, endIndex);
 
-            currentPageLinks.forEach(link => {
-                window.open(link.url, '_blank');
+            currentPageLinks.forEach((link, index) => {
+                // 使用唯一窗口名称，确保每个链接都在独立的新窗口中打开
+                const uniqueName = '_blank_' + Date.now() + '_' + index + '_' + Math.random().toString(36).substr(2, 5);
+                window.open(link.url, uniqueName);
                 this.markAsOpened(link.url);
             });
         }
@@ -793,7 +935,9 @@
             document.querySelectorAll('.open-link').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const url = decodeURIComponent(e.target.dataset.url);
-                    window.open(url, '_blank');
+                    // 使用唯一窗口名称，确保每个链接都在独立的新窗口中打开
+                    const uniqueName = '_blank_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8);
+                    window.open(url, uniqueName);
                     this.markAsOpened(url);
                     this.render();
                 });
