@@ -1,375 +1,287 @@
-# 网址获取浏览器插件/油猴脚本
+<div align="center">
 
-一个用于获取当前网页中所有超链接的浏览器插件和油猴脚本，支持智能排序、链接去重、分页展示、缓存管理和批量打开功能。
+# 🔗 WebLinkSniffer
 
-🌍 **现已支持多语言** | **Now supports Multiple Languages**
-- 🇨🇳 简体中文
-- 🇬🇧 English
+**Extract, manage & batch-open all hyperlinks from any webpage**
 
-**支持两种安装方式**：
-- 🔌 浏览器扩展（Chrome/Edge）- 原生集成，性能最佳
-- 🐱 油猴脚本 - 轻量级方案，无需修改浏览器配置
+[![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](LICENSE)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome-Add%20to%20Chrome-4285F4?logo=google-chrome&logoColor=white)](https://chrome.google.com/webstore)
+[![Tampermonkey](https://img.shields.io/badge/Tampermonkey-Install%20Script-00485B?logo=tampermonkey)](https://www.tampermonkey.net/)
 
-## 功能特性
+<p align="center">
+  <a href="#english">🇺🇸 English</a> •
+  <a href="#chinese">🇨🇳 简体中文</a>
+</p>
 
-### 核心功能
-- 🔍 **自动获取链接**：自动扫描当前网页中的所有超链接
-- 📄 **分页展示**：每页显示5个链接，支持上一页/下一页导航
-- 🗂️ **智能排序**：自动将已打开的链接移到列表末尾，并按链接质量评分排序
-- 🔗 **链接去重**：自动去除重复链接，合并含 # 锚点的相同页面
-- 💾 **缓存管理**：记住已打开的链接，避免重复打开
+</div>
 
-### 过滤与屏蔽
-- 🚫 **一键屏蔽**：每条链接右侧有屏蔽按钮，一键加入屏蔽列表
-- 🌐 **域名屏蔽**：一键屏蔽链接所属整个域名，即刻过滤
-- 🏷️ **关键词过滤**：支持按链接文本关键词过滤链接
-- 📁 **路径模式过滤**：支持正则表达式匹配路径，灵活过滤
+---
 
-### 用户交互
-- 📋 **快速复制**：一键复制链接 URL 到剪贴板
-- ☑️ **多选批量操作**（插件版）：勾选多个链接，支持批量屏蔽/复制/打开
-- 🔄 **撤销功能**：每次屏蔽操作带 Toast 通知和「撤销」按钮
-- 🏷️ **已屏蔽链接管理**：底部展示已屏蔽链接标签，点击可撤销，一键清空
-- 🔎 **搜索功能**（油猴版）：实时搜索链接标题和 URL
+<a name="english"></a>
+## 🇺🇸 English
 
-## 文件结构
+### ✨ What is WebLinkSniffer?
 
-```
-网址获取/
-├── manifest.json          # 插件配置文件
-├── popup.html            # 弹出页面 HTML
-├── popup.css             # 弹出页面样式
-├── popup.js              # 弹出页面逻辑
-├── content.js            # 内容脚本（获取页面链接）
-├── options.html          # 配置页面 HTML
-├── options.js            # 配置页面逻辑
-├── i18n.js               # 浏览器插件国际化工具
-├── tampermonkey_i18n.js  # 油猴脚本国际化工具
-├── _locales/             # 翻译文件
-│   ├── zh_CN/            # 简体中文翻译
-│   │   └── messages.json
-│   └── en/               # 英文翻译
-│       └── messages.json
-├── icons/                # 插件图标
-│   ├── icon16.png
-│   ├── icon48.png
-│   ├── icon128.png
-│   └── icon.svg
-├── tests/                # 测试页面
-│   ├── test.html         # 基础链接获取测试
-│   ├── test_filter.html  # 域名过滤测试
-│   ├── test_hash_links.html   # 哈希链接去重测试
-│   └── test_keyword_filter.html # 关键词过滤测试
-├── docs/                 # 开发文档
-│   ├── CONFIG_FEATURE_SUMMARY.md
-│   ├── LINK_DEDUP_SUMMARY.md
-│   ├── OPTIMIZATION_SUMMARY.md
-│   ├── I18N_GUIDE.md              # 国际化集成指南
-│   ├── I18N_MIGRATION_CHECKLIST.md # 国际化迁移清单
-│   └── style-preview.html
-├── examples/             # 代码示例
-│   ├── popup_i18n.html   # HTML 国际化示例
-│   └── popup_i18n.js     # JavaScript 国际化示例
-├── .gitignore
-├── LICENSE
-├── CHANGELOG.md
-└── README.md
+**WebLinkSniffer** is a powerful browser extension & userscript that helps you extract and manage all hyperlinks from any webpage in seconds.
+
+Perfect for:
+- 📚 **Researchers** - Collect reference links efficiently
+- 🕵️ **SEO Analysts** - Audit page links quickly  
+- 💻 **Developers** - Extract documentation links
+- 📖 **Content Curators** - Build link collections effortlessly
+
+### 🚀 Why WebLinkSniffer?
+
+| 🎯 Feature | 💡 How It Helps |
+|------------|----------------|
+| **⚡ One-Click Extraction** | Grab all links instantly, no manual copying |
+| **🧹 Smart Deduplication** | Removes duplicates & merges anchor variants automatically |
+| **📄 Smart Pagination** | View 5 links per page - no overwhelming scroll |
+| **🛡️ Advanced Filtering** | Block domains, keywords, or regex patterns |
+| **☑️ Batch Operations** | Open/copy/block multiple links at once |
+| **🔍 Real-Time Search** | Find links instantly as you type |
+| **🌍 Multi-Language** | English & 中文 supported natively |
+| **💾 Session Memory** | Remembers opened links, never repeat |
+
+### 📦 Installation
+
+#### Option 1: Browser Extension ⭐ (Recommended)
+
+<table>
+<tr>
+<td width="50%">
+
+**Chrome / Edge / Brave**
+
+1. Download this repository
+2. Go to `chrome://extensions/`
+3. Enable **Developer mode** (toggle top-right)
+4. Click **"Load unpacked"**
+5. Select the project folder ✅
+
+</td>
+<td width="50%">
+
+```bash
+# Or use git clone
+git clone https://github.com/KingdeGuo/WebLinkSniffer.git
+cd WebLinkSniffer
+# Then follow steps 2-5 above
 ```
 
-## 安装方法
+</td>
+</tr>
+</table>
 
-### 方式一：浏览器插件（推荐）
+#### Option 2: Tampermonkey Script 🐱
 
-#### Chrome 浏览器
+<table>
+<tr>
+<td>
 
-1. 打开 Chrome 浏览器，进入扩展程序页面：
-   - 地址栏输入：`chrome://extensions/`
-   - 或点击菜单 → 更多工具 → 扩展程序
+1. Install [Tampermonkey extension](https://www.tampermonkey.net/)
+2. Open [`tampermonkey_script.js`](tampermonkey_script.js)
+3. Copy all code → Tampermonkey → Create new script
+4. Paste & Save 💾
+5. Floating 🔗 button appears on all sites!
 
-2. 开启右上角的 **"开发者模式"**
+</td>
+</tr>
+</table>
 
-3. 点击 **"加载已解压的扩展程序"** 按钮
+### 🎮 Quick Start
 
-4. 选择本项目文件夹
+```markdown
+1. Visit any webpage
+2. Click the 🔗 icon (or floating button for userscript)
+3. Browse paginated links
+4. Click 🚫 to block, ☑️ to select multiple
+5. Hit "Open Selected" to batch-open! 🚀
+```
 
-5. 插件安装完成，浏览器工具栏会显示插件图标
+### 📸 Screenshots
 
-#### Edge 浏览器
+> *Coming soon - Screenshots of the UI in action*
 
-1. 打开 Edge 浏览器，进入扩展程序页面：
-   - 地址栏输入：`edge://extensions/`
+### 🛠️ Tech Stack
 
-2. 开启左下角的 **"开发人员模式"**
+- **Manifest V3** - Modern extension architecture
+- **Chrome Storage API** - Fast local persistence  
+- **chrome.i18n** - Native i18n support
+- **GM API** - Tampermonkey integration
+- **Smart URL Normalization** - Protocol, www, params, anchors
 
-3. 点击 **"加载解压缩的扩展"** 按钮
+### 🌍 Languages Supported
 
-4. 选择本项目文件夹
+| Language | Code | Status |
+|----------|------|--------|
+| 🇺🇸 English | `en` | ✅ Native |
+| 🇨🇳 简体中文 | `zh_CN` | ✅ Native |
 
-### 方式二：油猴脚本
+### 📝 Documentation
 
-如果不想安装浏览器扩展，可以使用油猴脚本版本：
+- [I18N Integration Guide](docs/I18N_GUIDE.md)
+- [Migration Checklist](docs/I18N_MIGRATION_CHECKLIST.md)
+- [Code Examples](examples/)
 
-1. **安装油猴插件**（如果还未安装）：
-   - Chrome/Edge：安装 [Tampermonkey](https://www.tampermonkey.net/)
-   - Firefox/Safari：安装 [Greasemonkey](https://www.greasespot.net/) 或 [Tampermonkey](https://www.tampermonkey.net/)
+---
 
-2. **安装脚本**：
-   - 在本项目中找到 `tampermonkey_script.js` 文件
-   - 复制全部代码
-   - 点击油猴图标 → 创建新脚本 → 粘贴代码并保存
-   - 或直接在油猴管理面板编辑脚本
+<a name="chinese"></a>
+## 🇨🇳 简体中文
 
-3. **使用方法**：
-   - 访问任何网站后，右上角会出现 🔗 浮动按钮
-   - 点击按钮打开链接管理器
+### ✨ WebLinkSniffer 是什么？
 
-## 语言支持
+**WebLinkSniffer** 是一款强大的浏览器扩展和油猴脚本，帮助您在几秒钟内提取和管理网页中的所有超链接。
 
-### 🌐 支持的语言
-- **简体中文** (Chinese) - 完全支持
-- **English** - 完全支持
+适用于：
+- 📚 **研究人员** - 高效收集参考文献链接
+- 🕵️ **SEO 分析师** - 快速审计页面链接
+- 💻 **开发者** - 提取文档链接
+- 📖 **内容策展人** - 轻松构建链接集合
 
-### 🔄 语言自动检测
-- **浏览器插件版**：根据浏览器 UI 语言自动选择（偏好设置优先）
-- **油猴脚本版**：根据浏览器语言自动选择（脚本存储优先）
+### 🚀 为什么选择 WebLinkSniffer？
 
-### 🔧 手动切换语言
-在插件弹出窗口或配置页面的右上角可以看到语言选择器，点击即可切换语言。
+| 🎯 功能 | 💡 帮助 |
+|---------|---------|
+| **⚡ 一键提取** | 即时抓取所有链接，无需手动复制 |
+| **🧹 智能去重** | 自动移除重复链接并合并锚点变体 |
+| **📄 智能分页** | 每页显示 5 个链接 - 不会滚动疲劳 |
+| **🛡️ 高级过滤** | 按域名、关键词或正则表达式屏蔽 |
+| **☑️ 批量操作** | 同时打开/复制/屏蔽多个链接 |
+| **🔍 实时搜索** | 输入时即时查找链接 |
+| **🌍 多语言** | 原生支持英文和中文 |
+| **💾 会话记忆** | 记住已打开链接，避免重复 |
 
-### 📖 国际化文档
-- [详细集成指南](docs/I18N_GUIDE.md) - 如何在现有项目中集成 i18n
-- [迁移检查清单](docs/I18N_MIGRATION_CHECKLIST.md) - 逐步迁移指南
-- [代码示例](examples/) - 集成示例代码
+### 📦 安装方式
 
-## 使用方法
+#### 方案一：浏览器扩展 ⭐（推荐）
 
-### 浏览器插件版本
+<table>
+<tr>
+<td width="50%">
 
-1. **打开插件**：
-   - 点击浏览器工具栏中的插件图标
-   - 弹出窗口会显示当前页面的所有链接
+**Chrome / Edge / Brave**
 
-2. **浏览链接**：
-   - 每页显示5个链接
-   - 使用"上一页"/"下一页"按钮导航
-   - 已打开的链接会显示为灰色
+1. 下载本仓库
+2. 访问 `chrome://extensions/`
+3. 启用 **开发者模式**（右上角开关）
+4. 点击 **"加载已解压的扩展程序"**
+5. 选择项目文件夹 ✅
 
-3. **管理链接**：
-   - 勾选链接旁边的复选框标记为已打开
-   - 取消勾选可移除标记
+</td>
+<td width="50%">
+
+```bash
+# 或使用 git clone
+git clone https://github.com/KingdeGuo/WebLinkSniffer.git
+cd WebLinkSniffer
+# 然后按上述步骤 2-5 操作
+```
 
-4. **批量操作**：
-   - 点击"刷新链接"重新获取当前页面链接
-   - 点击"打开本页链接"批量打开当前页的所有链接
+</td>
+</tr>
+</table>
 
-5. **屏蔽管理**：
-   - 点击链接右侧的 🚫 按钮屏蔽单条链接
-   - 点击 🌐 按钮屏蔽整个域名
-   - 点击 📁 按钮屏蔽当前 URL 的路径模式（如 `/blog/`），所有包含该路径的链接都会被过滤
-   - 勾选多个链接后使用顶部工具栏批量操作
-   - 屏蔽后可点击 Toast 中的「撤销」恢复
+#### 方案二：Tampermonkey 脚本 🐱
 
-6. **设置选项**：
-   - 勾选"自动将已打开的链接移到末尾"启用智能排序
+<table>
+<tr>
+<td>
 
-### 油猴脚本版本
+1. 安装 [Tampermonkey 扩展](https://www.tampermonkey.net/)
+2. 打开 [`tampermonkey_script.js`](tampermonkey_script.js)
+3. 复制全部代码 → Tampermonkey → 创建新脚本
+4. 粘贴并保存 💾
+5. 所有网站右上角出现浮动 🔗 按钮！
 
-1. **打开管理器**：
-   - 访问任何网页后，右上角会出现一个 🔗 浮动按钮
-   - 点击浮动按钮打开链接管理器弹窗
-
-2. **管理界面功能**：
-   - **搜索框**：输入关键词快速查找链接（支持标题和 URL 搜索）
-   - **分页导航**：每页显示 5 个链接，支持上一页/下一页
-   - **统计信息**：显示总链接数、新链接数、已打开链接数
-   
-3. **链接操作**：
-   - **打开**：在新标签页中打开链接
-   - **复制**：复制链接 URL 到剪贴板
-   - **屏蔽**：屏蔽单条链接，刷新后不再显示
-   - **屏蔽域名**：屏蔽整个域名的所有链接
-   
-4. **高级选项**：
-   - **自动移动已打开链接到末尾**：勾选此项启用
-   - **隐藏已打开链接**：勾选此项在列表中隐藏已打开的链接
-   - **打开当前页全部链接**：将当前页面的所有链接在新标签页中打开
-   
-5. **刷新与保存**：
-   - 点击"刷新链接"重新扫描当前页面的链接
-   - 点击"保存设置"保存用户偏好设置
-
-## 技术实现
-
-### 国际化 (i18n) 架构
-
-#### 浏览器插件
-- **翻译存储**：Chrome 标准 `_locales/` 目录结构
-- **运行时 API**：`chrome.i18n.getMessage()`
-- **语言检测**：`chrome.i18n.getUILanguage()`
-- **工具模块**：`i18n.js` - 统一封装，提供模板替换支持
-- **使用方式**：HTML `data-i18n` 属性 或 JavaScript `I18n.t()`
-
-#### 油猴脚本
-- **翻译存储**：内嵌 `tampermonkey_i18n.js`
-- **持久化**：`GM_setValue()` / `GM_getValue()`
-- **语言检测**：`navigator.language`
-- **工具类**：`TampermonkeyI18n` - 独立使用
-
-### 浏览器插件版本
-
-**核心组件**：
-1. **manifest.json** - 扩展配置文件（含 i18n）
-2. **content.js** - 内容脚本，注入到网页中获取链接
-3. **popup.html/popup.js** - 弹出界面和逻辑
-4. **options.html/options.js** - 设置页面
-5. **i18n.js** - 国际化工具模块
-6. **_locales/** - 翻译文件（支持 zh_CN, en）
-7. **icons/** - 插件图标资源
-
-**数据存储**：使用 Chrome Storage API (`chrome.storage.local`) 保存用户数据
-
-**国际化支持**：
-- 自动检测浏览器 UI 语言
-- 支持手动语言切换
-- localStorage 保存语言偏好
-
-**兼容性**：Chrome 88+，Edge 88+（Manifest V3）
-
-### 油猴脚本版本
-
-**文件**：`tampermonkey_script.js`
-
-**核心特性**：
-- 使用 GM API (Tampermonkey 提供的 API) 进行数据持久化
-- `GM_setValue`/`GM_getValue` 存储配置、缓存数据和语言选择
-- `GM_addStyle` 动态注入样式
-- 在文档加载完成后运行（`@run-at document-end`）
-- 内嵌 `tampermonkey_i18n.js` 提供国际化支持
-
-**工作原理**：
-1. 页面加载完成后，脚本创建一个浮动按钮 🔗
-2. 自动检测浏览器语言或使用保存的语言设置
-3. 用户点击按钮打开链接管理器（显示对应语言的界面）
-4. 管理器扫描页面中的所有 `<a>` 标签并进行去重、排序
-5. 支持实时搜索、过滤、屏蔽等操作
-6. 所有数据保存到本地存储
-
-**国际化支持**：
-- 内嵌多语言翻译
-- 自动检测浏览器语言
-- 手动语言切换
-- 使用 `i18n.t()` 获取翻译
-
-**支持浏览器**：
-- Chrome + Tampermonkey
-- Firefox + Greasemonkey
-- Edge + Tampermonkey
-- Safari + Tampermonkey（需要特定版本）
-
-### 共同的去重和排序算法
-
-**去重机制**：
-- **getDedupKey()** - 生成规范化的去重Key，处理：
-  - 协议升级（http → https）
-  - 去除 www 前缀
-  - 剥离无关查询参数（UTM参数、追踪参数等）
-  - 去除 URL 锚点
-  
-**排序算法**：
-- 优先按域名排序（字母顺序）
-- 同域名下按路径排序
-- 已打开链接可自动移到末尾
-
-## 测试方法
-
-1. 打开 `test.html` 文件（本地测试页面）
-2. 点击插件图标查看获取到的链接
-3. 测试分页、标记、批量打开等功能
-
-## 注意事项
-
-- 插件需要"activeTab"权限来获取当前标签页内容
-- 需要"storage"权限来保存用户设置和缓存
-- 不会收集或上传任何用户数据
-- 所有数据仅存储在本地浏览器中
-
-## 自定义开发
-
-### 浏览器插件版本
-
-1. **修改分页大小**：在 `popup.js` 中修改 `pageSize` 变量
-2. **调整样式**：修改 `popup.css` 文件
-3. **更改链接过滤规则**：修改 `content.js` 中的 `getAllLinks()` 函数
-4. **添加新功能**：扩展 `popup.js` 中的 `LinkManager` 类
-
-### 油猴脚本版本
-
-1. **修改分页大小**：
-   ```javascript
-   // 在 LinkManager 构造函数中修改
-   this.pageSize = 5; // 改为其他数字
-   ```
-
-2. **调整样式**：修改 `GM_addStyle()` 中的 CSS 样式
-
-3. **修改无关查询参数列表**：编辑 `getInsignificantParams()` 函数返回的 Set
-
-4. **自定义过滤规则**：
-   - 修改 `getFilteredLinks()` 函数中的过滤逻辑
-   - 添加新的过滤条件到 LinkManager 类
-
-5. **扩展链接操作**：在 `bindLinkEvents()` 中添加新的按钮事件处理
-
-### 开发技巧
-
-- 修改后可在浏览器控制台中查看调试信息（`console.log`）
-- 油猴脚本修改后会自动重新加载（需要刷新页面）
-- 浏览器插件修改后需要在扩展管理页面点击"重新加载"按钮
-- 使用 Firefox 的油猴脚本编辑器可在浏览器中直接编辑脚本
-
-## 故障排除
-
-### 浏览器插件版本
-
-**问题：插件无法获取链接**
-- 确保当前页面已完全加载
-- 刷新页面后重试
-- 检查浏览器控制台是否有错误
-
-**问题：链接显示不全**
-- 某些动态加载的链接可能需要页面交互后才能获取
-- 尝试滚动页面或点击"刷新链接"按钮
-
-**问题：插件图标不显示**
-- 重新加载已解压的扩展程序
-- 检查 manifest.json 文件格式是否正确
-
-### 油猴脚本版本
-
-**问题：浮动按钮不显示**
-- 确保油猴插件已启用
-- 检查脚本是否正确安装（在油猴管理面板中查看）
-- 刷新页面或清除浏览器缓存后重试
-
-**问题：点击按钮没反应**
-- 打开浏览器控制台（F12）查看是否有错误信息
-- 确保脚本权限正确（`@grant` 声明）
-- 检查页面是否为受保护的网站（某些网站会阻止脚本运行）
-
-**问题：数据未保存**
-- 不同网站的数据是隔离存储的，切换网站时前一个网站的临时数据会清除
-- 确保在关闭标签页或浏览器前点击"保存设置"按钮
-- 检查浏览器是否限制了油猴脚本的存储权限
-
-**问题：脚本加载缓慢**
-- 某些复杂页面（如微博、抖音等）有大量链接，处理需要时间
-- 点击"刷新链接"时会重新扫描页面，可能导致短暂延迟
-- 尝试缩小搜索范围，使用搜索框查找特定链接
-
-## 许可证
-
-本项目使用 MIT 许可证，详见 [LICENSE](LICENSE) 文件。
-
-## 更新日志
-
-完整的更新日志请查看 [CHANGELOG.md](CHANGELOG.md)。
+</td>
+</tr>
+</table>
+
+### 🎮 快速开始
+
+```markdown
+1. 访问任意网页
+2. 点击 🔗 图标（油猴版为浮动按钮）
+3. 浏览分页链接
+4. 点击 🚫 屏蔽，☑️ 多选
+5. 点击"打开选中项"批量打开！🚀
+```
+
+### 📸 截图展示
+
+> *即将推出 - UI 实际使用截图*
+
+### 🛠️ 技术栈
+
+- **Manifest V3** - 现代扩展架构
+- **Chrome Storage API** - 快速本地持久化
+- **chrome.i18n** - 原生国际化支持
+- **GM API** - Tampermonkey 集成
+- **智能 URL 规范化** - 协议、www、参数、锚点处理
+
+### 🌍 支持的语言
+
+| 语言 | 代码 | 状态 |
+|------|------|--------|
+| 🇺🇸 English | `en` | ✅ 原生支持 |
+| 🇨🇳 简体中文 | `zh_CN` | ✅ 原生支持 |
+
+### 📝 开发文档
+
+- [国际化集成指南](docs/I18N_GUIDE.md)
+- [迁移检查清单](docs/I18N_MIGRATION_CHECKLIST.md)
+- [代码示例](examples/)
+
+---
+
+## 📁 Project Structure / 项目结构
+
+```
+WebLinkSniffer/
+├── 📄 manifest.json              # Extension manifest / 扩展清单
+├── 🎨 popup.{html,css,js}        # Popup UI / 弹出界面
+├── 🔍 content.js                 # Link extraction / 链接提取
+├── ⚙️ options.{html,js}          # Settings / 设置页面
+├── 🌐 i18n.js                    # i18n utilities / 国际化工具
+├── 🐱 tampermonkey_script.js     # Userscript / 油猴脚本
+├── 🐱 tampermonkey_i18n.js       # Userscript i18n / 油猴 i18n
+├── 🗂️ _locales/                  # Translations / 翻译文件
+│   ├── en/messages.json          # English / 英文
+│   └── zh_CN/messages.json       # 简体中文
+├── 🎨 icons/                     # Icons / 图标
+├── 🧪 tests/                     # Test pages / 测试页面
+├── 📖 docs/                      # Documentation / 文档
+└── 💡 examples/                  # Examples / 示例
+```
+
+---
+
+## 🤝 Contributing / 贡献
+
+Contributions are welcome! Feel free to:
+- 🐛 Report bugs via [Issues](../../issues)
+- 💡 Suggest features  
+- 🔧 Submit pull requests
+
+欢迎贡献！可以通过以下方式参与：
+- 🐛 通过 [Issues](../../issues) 报告问题
+- 💡 建议新功能
+- 🔧 提交 Pull Request
+
+---
+
+## 📜 License / 许可证
+
+[MIT License](LICENSE) © KingdeGuo
+
+---
+
+<div align="center">
+
+**⭐ Star this repo if you find it helpful!**  
+**⭐ 如果觉得有用，请给本仓库点个星！**
+
+[🔝 Back to Top](#-weblinksniffer)
+
+</div>
