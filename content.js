@@ -81,10 +81,57 @@ async function getFilteredLinks() {
     }
 }
 
-// 获取URL的基础部分（去除锚点/hash，但保留查询参数），用于判断相同页面的不同定位子模块
-function getBaseUrl(url) {
+// 不影响页面内容的无关查询参数（追踪、回复交互、时间戳等）
+function getInsignificantParams() {
+    return new Set([
+        // 评论/回复交互参数
+        'replyto', 'replytocom', 'comment_id', 'commentid', 'showcomment',
+        // 营销/追踪参数
+        'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+        'utm_id', 'utm_source_platform', 'utm_creative_format', 'utm_marketing_tactic',
+        'fbclid', 'gclid', 'msclkid', 'dclid', 'twclid',
+        'igshid', 'mc_cid', 'mc_eid',
+        'ref', 'source', 'ref_src', 'ref_url', 'referrer',
+        '_ga', '_gl', '_gcl_au', '_gac_ua', '_hsenc', '_hsmi',
+        'ck_subscriber_id', 'mkt_tok', 'vero_id', 'wickedid',
+        'yclid', 'oly_enc_id', 'oly_anon_id',
+        'trk', 'trkcampaign',
+        // 时间戳/缓存破坏参数
+        't', 'timestamp', 'rand', 'random', 'nocache', '_', 'ver', 'v',
+        // 社交媒体分享参数
+        'share', 'sfnsn', 'sngid', 'si',
+        // 其他无关参数
+        'feature', 'embeds_referring_origin', 'embeds_referring',
+        'context', 'affiliate',
+    ]);
+}
+
+// 剥离不影响页面内容的无关查询参数
+function stripInsignificantParams(url) {
     try {
         const urlObj = new URL(url);
+        if (!urlObj.search || urlObj.search === '') {
+            return url;
+        }
+        const insignificant = getInsignificantParams();
+        let changed = false;
+        for (const key of [...urlObj.searchParams.keys()]) {
+            if (insignificant.has(key.toLowerCase())) {
+                urlObj.searchParams.delete(key);
+                changed = true;
+            }
+        }
+        return changed ? urlObj.toString() : url;
+    } catch (e) {
+        return url;
+    }
+}
+
+// 获取URL的基础部分（去除锚点/hash + 无关查询参数），用于判断相同页面的不同定位子模块
+function getBaseUrl(url) {
+    const cleaned = stripInsignificantParams(url);
+    try {
+        const urlObj = new URL(cleaned);
         urlObj.hash = '';
         let pathname = urlObj.pathname;
         if (pathname.endsWith('/') && pathname !== '/') {
@@ -92,16 +139,33 @@ function getBaseUrl(url) {
         }
         return urlObj.origin + pathname + urlObj.search;
     } catch (e) {
-        let baseUrl = url;
-        // 去除锚点
+        let baseUrl = cleaned;
         const hashIndex = baseUrl.indexOf('#');
         if (hashIndex > -1) {
             baseUrl = baseUrl.substring(0, hashIndex);
         }
-        // 规范化末尾斜杠
         if (baseUrl.endsWith('/') && baseUrl !== '/') {
             baseUrl = baseUrl.slice(0, -1);
         }
+        return baseUrl;
+    }
+}
+
+// 获取用于去重的规范化 Key（在 baseUrl 基础上进一步规范化协议和 www 前缀）
+function getDedupKey(url) {
+    const baseUrl = getBaseUrl(url);
+    try {
+        const urlObj = new URL(baseUrl);
+        // http → https 协议升级
+        if (urlObj.protocol === 'http:') {
+            urlObj.protocol = 'https:';
+        }
+        // 去除 www. 前缀
+        if (urlObj.hostname.startsWith('www.')) {
+            urlObj.hostname = urlObj.hostname.slice(4);
+        }
+        return urlObj.origin + urlObj.pathname + urlObj.search;
+    } catch (e) {
         return baseUrl;
     }
 }
@@ -262,16 +326,18 @@ function getAllLinks() {
                 isContentArea = false;
             }
             
-            // 获取基础URL（不带锚点和查询参数）
-            const baseUrl = getBaseUrl(href);
-            // 检查当前链接是否带有锚点或查询参数
-            const hasHashOrQuery = href !== baseUrl;
+            // 获取去重 Key（剥离无关参数 + 协议/www 规范化）
+            const dedupKey = getDedupKey(href);
+            // 获取净化后的 URL（只剥离无关参数、去除 hash）
+            const cleanUrl = getBaseUrl(href);
+            // 检查当前链接是否带有锚点或无关参数
+            const hasHashOrQuery = href !== cleanUrl;
             
-            // 检查是否已经有相同基础URL的链接
-            if (baseUrlMap.has(baseUrl)) {
-                const existingLink = baseUrlMap.get(baseUrl);
+            // 检查是否已经有相同规范化 Key 的链接
+            if (baseUrlMap.has(dedupKey)) {
+                const existingLink = baseUrlMap.get(dedupKey);
                 
-                // 如果当前链接是纯净的（不带锚点和查询参数），且已存在的链接不纯净，则替换
+                // 如果当前链接是纯净的（不带锚点和无关参数），且已存在的链接不纯净，则替换
                 if (!hasHashOrQuery && existingLink.hasHashOrQuery) {
                     // 替换为当前纯净的链接
                     const newLink = {
@@ -287,11 +353,11 @@ function getAllLinks() {
                     if (index !== -1) {
                         links[index] = newLink;
                     }
-                    baseUrlMap.set(baseUrl, newLink);
+                    baseUrlMap.set(dedupKey, newLink);
                 }
                 // 否则，忽略当前链接（如果已存在的链接是纯净的，或者当前链接不纯净）
             } else {
-                // 第一次遇到这个基础URL
+                // 第一次遇到这个规范化 Key
                 const linkObj = {
                     url: href,
                     title: title,
@@ -301,23 +367,23 @@ function getAllLinks() {
                     isContentArea: isContentArea
                 };
                 links.push(linkObj);
-                baseUrlMap.set(baseUrl, linkObj);
+                baseUrlMap.set(dedupKey, linkObj);
             }
         } catch (error) {
             console.error('处理链接时出错:', error);
         }
     });
     
-    // 根据用户需求，我们只保留不带#的链接
-    // 但是，如果某个基础URL只有带#的链接，我们也需要保留一个（至少显示一个链接）
-    // 首先，按基础URL分组，检查哪些基础URL有纯净链接
+    // 根据用户需求，我们只保留不带锚点的链接
+    // 但是，如果某个基础URL只有带锚点的链接，我们也需要保留一个（至少显示一个链接）
+    // 首先，按规范化 Key 分组（剥离无关参数 + 协议/www 规范化），检查哪些基础URL有纯净链接
     const baseUrlGroups = new Map();
     links.forEach(link => {
-        const baseUrl = getBaseUrl(link.url);
-        if (!baseUrlGroups.has(baseUrl)) {
-            baseUrlGroups.set(baseUrl, []);
+        const dedupKey = getDedupKey(link.url);
+        if (!baseUrlGroups.has(dedupKey)) {
+            baseUrlGroups.set(dedupKey, []);
         }
-        baseUrlGroups.get(baseUrl).push(link);
+        baseUrlGroups.get(dedupKey).push(link);
     });
     
     // 对于每个基础URL，优先选择纯净链接；如果只有带#的链接，保留第一个
