@@ -595,141 +595,248 @@
                     gap: 5px;
                 }
 
-                /* ===== 移动端适配样式 ===== */
+                /* ===== 移动端适配样式（全面优化 - 手机空间紧凑利用） ===== */
                 @media (max-width: 768px) {
                     .link-manager-container {
-                        width: 96%;
-                        padding: 15px 12px;
-                        max-height: 90vh;
-                        top: 50%;
-                        left: 50%;
-                        transform: translate(-50%, -50%);
-                        border-radius: 12px;
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        max-width: 100%;
+                        height: 100%;
+                        max-height: 100vh;
+                        transform: none;
+                        border-radius: 0;
+                        padding: 12px 10px;
+                        background: #f8f9fa;
                     }
                     .link-manager-container h2 {
-                        font-size: 18px;
-                        margin-top: 5px;
-                        margin-bottom: 12px;
+                        font-size: 16px;
+                        margin-top: 0;
+                        margin-bottom: 8px;
+                        text-align: center;
                     }
+                    /* 外层 controls-bar（搜索栏 + 分页）改为横向紧凑布局 */
                     .controls-bar {
-                        flex-direction: column;
-                        align-items: stretch;
-                        gap: 8px;
-                    }
-                    .controls-bar .pagination-controls {
-                        justify-content: center;
+                        flex-direction: row;
+                        flex-wrap: nowrap;
+                        align-items: center;
+                        gap: 6px;
+                        margin-bottom: 8px;
                     }
                     .search-box {
-                        width: 100%;
-                        box-sizing: border-box;
-                        font-size: 16px; /* 防止iOS缩放 */
-                        padding: 10px 12px;
+                        width: auto;
+                        flex: 1;
+                        min-width: 0;
+                        font-size: 14px;
+                        padding: 6px 8px;
+                    }
+                    .controls-bar .pagination-controls {
+                        flex-shrink: 0;
+                        display: flex;
+                        gap: 4px;
+                        align-items: center;
                     }
                     .pagination-btn {
-                        padding: 10px 16px;
-                        font-size: 14px;
-                        min-height: 44px; /* 触控友好最小高度 */
-                        min-width: 44px;
-                    }
-                    .pagination-controls {
-                        justify-content: center;
-                        width: 100%;
+                        padding: 6px 10px;
+                        font-size: 12px;
+                        min-height: 32px;
+                        min-width: 32px;
                     }
                     .pagination-controls span {
-                        font-size: 14px;
+                        font-size: 12px;
                         white-space: nowrap;
                     }
+                    /* 第二章 controls-bar（复选框 + 刷新按钮）改为行内包裹 */
+                    .controls-bar + .controls-bar {
+                        flex-direction: row;
+                        flex-wrap: wrap;
+                        gap: 4px;
+                        margin-bottom: 6px;
+                    }
                     .stats-bar {
-                        font-size: 13px;
-                        gap: 8px;
-                        justify-content: space-around;
+                        font-size: 12px;
+                        gap: 0;
+                        justify-content: space-between;
+                        margin-bottom: 6px;
+                        padding: 6px 8px;
+                        background: #fff;
+                        border-radius: 6px;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+                    }
+                    .stats-bar div {
+                        white-space: nowrap;
                     }
                     .link-item {
-                        padding: 12px 10px;
+                        padding: 8px;
+                        margin-bottom: 6px;
                     }
                     .link-title {
-                        font-size: 15px;
-                        line-height: 1.4;
+                        font-size: 13px;
+                        line-height: 1.3;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
                     }
                     .link-url {
-                        font-size: 12px;
-                        line-height: 1.4;
+                        font-size: 10px;
+                        line-height: 1.3;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
                     }
                     .link-actions {
-                        gap: 6px;
+                        gap: 4px;
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        margin-top: 6px;
                     }
                     .link-btn {
-                        padding: 8px 12px;
-                        font-size: 13px;
-                        min-height: 44px; /* 触控友好最小高度 */
-                        flex: 1;
-                        text-align: center;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
+                        padding: 4px 6px;
+                        font-size: 11px;
+                        min-height: 30px;
+                        flex: none;
+                        width: 100%;
+                    }
+                    .link-btn.open-link {
+                        background: #007cba;
+                        color: white;
+                        border-color: #007cba;
+                    }
+                    .link-btn.copy-link {
+                        background: #f0f0f0;
+                    }
+                    .link-btn.block-link {
+                        background: #fff5f5;
+                        color: #c92a2a;
+                        border-color: #ffc9c9;
+                    }
+                    .link-btn.block-domain {
+                        background: #fff4e6;
+                        color: #d9480f;
+                        border-color: #ffd8a8;
                     }
                     .close-btn {
-                        top: 8px;
-                        right: 12px;
-                        font-size: 28px;
-                        padding: 8px;
+                        top: 6px;
+                        right: 10px;
+                        font-size: 24px;
+                        padding: 4px;
                     }
                     .checkbox-container {
-                        padding: 6px 0;
+                        padding: 0;
                     }
                     .checkbox-container label {
-                        font-size: 14px;
+                        font-size: 12px;
                     }
                     .checkbox-container input[type="checkbox"] {
-                        width: 20px;
-                        height: 20px;
+                        width: 16px;
+                        height: 16px;
                     }
                     #showLinksBtn {
-                        top: 15px;
-                        right: 15px;
-                        width: 44px;
-                        height: 44px;
-                        font-size: 20px;
+                        top: 12px;
+                        right: 12px;
+                        width: 40px;
+                        height: 40px;
+                        font-size: 18px;
+                    }
+                    /* 底部的 controls-bar（打开全部 + 保存设置）改为两列等宽 */
+                    #linksContainer + .controls-bar {
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 6px;
+                        margin-top: 8px;
+                    }
+                    #linksContainer + .controls-bar .pagination-btn {
+                        width: 100%;
+                        padding: 8px;
+                        font-size: 13px;
+                        min-height: 36px;
                     }
                 }
 
-                /* 小屏手机适配 */
+                /* 小屏手机适配（≤375px，如 iPhone SE） */
                 @media (max-width: 375px) {
                     .link-manager-container {
-                        padding: 12px 10px;
+                        padding: 8px 6px;
+                    }
+                    .link-manager-container h2 {
+                        font-size: 14px;
+                        margin-bottom: 6px;
+                    }
+                    .link-item {
+                        padding: 6px;
+                        margin-bottom: 4px;
+                    }
+                    .link-title {
+                        font-size: 12px;
+                    }
+                    .link-url {
+                        font-size: 9px;
+                    }
+                    .link-actions {
+                        grid-template-columns: 1fr 1fr;
+                        gap: 3px;
                     }
                     .link-btn {
-                        padding: 6px 8px;
-                        font-size: 12px;
-                        min-height: 38px;
+                        padding: 3px 4px;
+                        font-size: 10px;
+                        min-height: 26px;
                     }
                     .stats-bar {
-                        font-size: 12px;
-                        flex-direction: column;
-                        align-items: center;
-                        gap: 4px;
+                        padding: 4px 6px;
+                        font-size: 11px;
+                    }
+                    .pagination-btn {
+                        padding: 4px 6px;
+                        font-size: 11px;
+                        min-height: 28px;
+                    }
+                    .search-box {
+                        font-size: 13px;
+                        padding: 4px 6px;
+                    }
+                    #showLinksBtn {
+                        width: 36px;
+                        height: 36px;
+                        font-size: 16px;
+                        top: 10px;
+                        right: 10px;
                     }
                 }
 
                 /* 横屏手机适配 */
                 @media (max-height: 500px) and (orientation: landscape) {
                     .link-manager-container {
-                        max-height: 95vh;
-                        padding: 10px 12px;
+                        padding: 6px 10px;
+                        display: flex;
+                        flex-direction: column;
                     }
                     .link-manager-container h2 {
-                        font-size: 16px;
-                        margin-bottom: 8px;
+                        font-size: 14px;
+                        margin-bottom: 4px;
                     }
                     .stats-bar {
-                        margin-bottom: 8px;
+                        margin-bottom: 4px;
+                        padding: 3px 6px;
                     }
                     .controls-bar {
-                        margin-bottom: 8px;
+                        margin-bottom: 4px;
                     }
                     .link-item {
-                        padding: 8px;
-                        margin-bottom: 5px;
+                        padding: 4px 6px;
+                        margin-bottom: 3px;
+                    }
+                    .link-title {
+                        font-size: 12px;
+                    }
+                    .link-actions {
+                        margin-top: 3px;
+                        grid-template-columns: repeat(4, 1fr);
+                    }
+                    .link-btn {
+                        padding: 2px 4px;
+                        min-height: 24px;
+                        font-size: 10px;
                     }
                 }
             `);
@@ -842,17 +949,25 @@
             });
         }
 
+        // 分批打开当前页所有链接，每个链接间隔 350ms 以避免浏览器弹窗拦截
         openCurrentPageLinks() {
             const startIndex = (this.currentPage - 1) * this.pageSize;
             const endIndex = startIndex + this.pageSize;
             const currentPageLinks = this.getDisplayLinks().slice(startIndex, endIndex);
 
             currentPageLinks.forEach((link, index) => {
-                // 使用唯一窗口名称，确保每个链接都在独立的新窗口中打开
-                const uniqueName = '_blank_' + Date.now() + '_' + index + '_' + Math.random().toString(36).substr(2, 5);
-                window.open(link.url, uniqueName);
-                this.markAsOpened(link.url);
+                setTimeout(() => {
+                    this.openLinkInNewWindow(link.url);
+                    this.markAsOpened(link.url);
+                }, index * 350);
             });
+        }
+
+        // 统一的链接打开方法：使用 window.open 在新窗口/标签页中打开，每次延迟 100ms
+        openLinkInNewWindow(url) {
+            setTimeout(() => {
+                window.open(url, '_blank');
+            }, 100);
         }
 
         markAsOpened(url) {
@@ -931,15 +1046,19 @@
         }
 
         bindLinkEvents() {
-            // 打开链接
+            // 打开链接 - 使用 window.open 在新窗口/标签页打开
             document.querySelectorAll('.open-link').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const url = decodeURIComponent(e.target.dataset.url);
-                    // 使用唯一窗口名称，确保每个链接都在独立的新窗口中打开
-                    const uniqueName = '_blank_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8);
-                    window.open(url, uniqueName);
+                    window.open(url, '_blank');
                     this.markAsOpened(url);
                     this.render();
+                    // 短暂显示提示
+                    const toast = document.createElement('div');
+                    toast.textContent = '正在打开链接...';
+                    toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1f2937;color:white;padding:8px 16px;border-radius:8px;font-size:13px;z-index:10001;';
+                    document.body.appendChild(toast);
+                    setTimeout(() => toast.remove(), 1500);
                 });
             });
 
