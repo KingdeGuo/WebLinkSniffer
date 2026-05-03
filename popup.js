@@ -267,6 +267,12 @@ class LinkManager {
     
     
     sortLinks() {
+        // 计算页面最大 Y 位置，用于归一化评分
+        const maxYPosition = this.links.reduce((max, link) => {
+            if (link.yPosition && link.yPosition > max) return link.yPosition;
+            return max;
+        }, 0);
+
         // 基于价值打分排序，autoMoveOpened 控制是否将已打开链接统一移到末尾
         this.links.sort((a, b) => {
             const aOpened = this.openedLinks.has(a.url);
@@ -275,7 +281,7 @@ class LinkManager {
                 return aOpened ? 1 : -1;
             }
 
-            const scoreDiff = this.getLinkScore(b) - this.getLinkScore(a);
+            const scoreDiff = this.getLinkScore(b, maxYPosition) - this.getLinkScore(a, maxYPosition);
             if (scoreDiff !== 0) {
                 return scoreDiff;
             }
@@ -298,7 +304,7 @@ class LinkManager {
         });
     }
     
-    getLinkScore(link) {
+    getLinkScore(link, maxYPosition) {
         let score = 0;
 
         if (!this.openedLinks.has(link.url)) {
@@ -306,6 +312,27 @@ class LinkManager {
         }
         if (this.isSameDomain(link.url)) {
             score += 40;
+        }
+
+        // 位置评分：页面越靠前的链接越重要（0~30分）
+        if (maxYPosition > 0 && link.yPosition !== undefined && link.yPosition >= 0) {
+            const normalizedY = link.yPosition / maxYPosition;
+            if (normalizedY < 0.15) {
+                score += 30;
+            } else if (normalizedY < 0.3) {
+                score += 25;
+            } else if (normalizedY < 0.5) {
+                score += 18;
+            } else if (normalizedY < 0.7) {
+                score += 10;
+            } else {
+                score += 3;
+            }
+        }
+
+        // 正文区评分（0~25分）
+        if (link.isContentArea) {
+            score += 25;
         }
 
         const titleScore = this.getTitleScore(link.title || link.url);
@@ -318,10 +345,27 @@ class LinkManager {
 
             const params = new URLSearchParams(urlObj.search);
             const paramCount = Array.from(params.keys()).length;
-            score += Math.max(0, 5 - paramCount) * 3;
+            // 检测是否有追踪参数
+            const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+                'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ref', 'source', 'tracking',
+                'gbraid', 'wbraid', 'twclid', 'igshid'];
+            const trackingCount = Array.from(params.keys()).filter(k =>
+                trackingParams.includes(k.toLowerCase())
+            ).length;
+            const cleanParamCount = paramCount - trackingCount;
+            score += Math.max(0, 5 - cleanParamCount) * 3;
+            // 追踪参数惩罚
+            score -= trackingCount * 6;
 
             if (!urlObj.search) {
                 score += 8;
+            }
+
+            // 文章路径特征奖励
+            const pathLower = urlObj.pathname.toLowerCase();
+            if (/\/(article|post|blog|news|story|read|p|entry|detail|content|202\d|20[12]\d)\//.test(pathLower) ||
+                /\/[a-z0-9]+[-_][a-z0-9]+[-_][a-z0-9]+/.test(pathLower)) {
+                score += 15;
             }
         } catch (e) {
             score += 0;
@@ -344,17 +388,30 @@ class LinkManager {
         const charCount = normalized.length;
         let score = 0;
 
-        if (wordCount >= 3) {
-            score += 20;
-        }
-        if (charCount >= 15 && charCount <= 80) {
+        // 有意义长度奖励
+        if (wordCount >= 3 && charCount >= 15 && charCount <= 80) {
+            score += 30;
+        } else if (wordCount >= 2 && charCount >= 10 && charCount <= 80) {
             score += 20;
         } else if (charCount > 80) {
             score += 10;
+        } else {
+            score += 5;
         }
 
+        // 包含自然语言文字（中英文）
         if (/[\u4e00-\u9fa5]/.test(normalized) || /[a-zA-Z]/.test(normalized)) {
             score += 10;
+        }
+
+        // 纯数字/符号惩罚
+        if (/^[\d\s\-\|\.\,\;\:\!\?\(\)\[\]\{\}\#\@\$\^&\*\+\=\/\\`~]+$/.test(normalized)) {
+            score -= 10;
+        }
+
+        // 完全没意义的内容
+        if (/^(更多|more|learn more|read more|点击|click|here|这里|详情|detail|查看)$/i.test(normalized)) {
+            score -= 15;
         }
 
         return score;

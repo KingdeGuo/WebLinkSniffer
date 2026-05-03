@@ -217,6 +217,51 @@ function getAllLinks() {
                 title = title.substring(0, 97) + '...';
             }
             
+            // 获取链接在页面中的垂直位置
+            let yPosition = 0;
+            try {
+                const rect = anchor.getBoundingClientRect();
+                yPosition = rect.top + window.scrollY;
+            } catch (e) {
+                yPosition = 0;
+            }
+            
+            // 判断链接是否在正文内容区域（而非导航栏、页脚等）
+            let isContentArea = false;
+            try {
+                let parent = anchor.parentElement;
+                let depth = 0;
+                while (parent && parent !== document.body && parent !== document.documentElement && depth < 20) {
+                    const tagName = parent.tagName.toLowerCase();
+                    // 排除明显的导航/页脚区域
+                    if (tagName === 'nav' || tagName === 'footer' || tagName === 'header') {
+                        isContentArea = false;
+                        break;
+                    }
+                    // 检测正文区域标记
+                    if (tagName === 'main' || tagName === 'article' || tagName === 'section' ||
+                        parent.getAttribute('role') === 'main' || parent.getAttribute('role') === 'article') {
+                        isContentArea = true;
+                        break;
+                    }
+                    const className = (parent.className && typeof parent.className === 'string') ? parent.className : '';
+                    const id = (parent.id || '');
+                    if (/\b(content|article|post|entry|body|text)\b/i.test(className) ||
+                        /\b(content|article|post|entry|main)\b/i.test(id)) {
+                        isContentArea = true;
+                        break;
+                    }
+                    parent = parent.parentElement;
+                    depth++;
+                }
+                // 如果遍历到 body 还没找到明确标记，且不在 nav/footer/header 中，可能是内容区
+                if (depth >= 20 || parent === document.body || parent === document.documentElement) {
+                    // 如果没有明确排除标记，保守判断为非内容区
+                }
+            } catch (e) {
+                isContentArea = false;
+            }
+            
             // 获取基础URL（不带锚点和查询参数）
             const baseUrl = getBaseUrl(href);
             // 检查当前链接是否带有锚点或查询参数
@@ -233,7 +278,9 @@ function getAllLinks() {
                         url: href,
                         title: title,
                         element: anchor.outerHTML,
-                        hasHashOrQuery: false
+                        hasHashOrQuery: false,
+                        yPosition: yPosition,
+                        isContentArea: isContentArea
                     };
                     // 更新links数组中的对应项
                     const index = links.findIndex(link => link.url === existingLink.url);
@@ -249,7 +296,9 @@ function getAllLinks() {
                     url: href,
                     title: title,
                     element: anchor.outerHTML,
-                    hasHashOrQuery: hasHashOrQuery
+                    hasHashOrQuery: hasHashOrQuery,
+                    yPosition: yPosition,
+                    isContentArea: isContentArea
                 };
                 links.push(linkObj);
                 baseUrlMap.set(baseUrl, linkObj);
