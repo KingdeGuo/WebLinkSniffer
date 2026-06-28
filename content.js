@@ -2,12 +2,18 @@
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'getLinks') {
         getFilteredLinks().then(links => {
+            const pageMeta = {
+                title: document.title || '',
+                description: (document.querySelector('meta[name="description"]') || {}).content || '',
+                bodyText: document.body ? document.body.innerText.substring(0, 2000) : ''
+            };
             sendResponse({
                 links,
-                pageUrl: window.location.href
+                pageUrl: window.location.href,
+                pageMeta
             });
         });
-        return true; // 保持消息通道开放以支持异步响应
+        return true;
     }
 });
 

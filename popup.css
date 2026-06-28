@@ -181,7 +181,7 @@ h1 {
 
 .links-container {
     margin-bottom: 10px;
-    max-height: 260px;
+    max-height: 420px;
     overflow-y: auto;
     border-radius: 12px;
     background: white;
@@ -697,4 +697,80 @@ h1 {
 .btn-icon:hover {
     background: #f9fafb;
     transform: scale(1.05);
+}
+
+/* ========== 分组标题 ========== */
+.page-type-badge {
+    display: block;
+    width: fit-content;
+    margin: 0 auto 12px auto;
+    padding: 2px 10px;
+    background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+    border: 1px solid #c4b5fd;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6d28d9;
+    text-align: center;
+}
+
+.group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    margin: 4px 0 2px 0;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-radius: 8px;
+    border-left: 3px solid #667eea;
+    font-size: 11px;
+    font-weight: 600;
+    color: #475569;
+    user-select: none;
+}
+
+.group-icon {
+    font-size: 12px;
+}
+
+.group-label {
+    flex: 1;
+}
+
+.group-count {
+    background: #e2e8f0;
+    color: #64748b;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+/* ========== 重要性标记 ========== */
+.importance-dot {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 5px;
+    margin-left: 2px;
+}
+
+.importance-high {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    box-shadow: 0 0 4px rgba(34, 197, 94, 0.4);
+}
+
+.importance-medium {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    box-shadow: 0 0 4px rgba(245, 158, 11, 0.3);
+}
+
+.importance-low {
+    background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+}
+
+/* ========== 链接项紧凑化 ========== */
+.link-item {
+    padding: 8px 10px;
 }

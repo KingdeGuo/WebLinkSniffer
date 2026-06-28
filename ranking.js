@@ -1,22 +1,588 @@
 /**
- * ML-Inspired Ranking Engine for Link Sniffer
+ * Adaptive Ranking Engine v3
  *
- * Implements BM25, TF-IDF, cosine similarity, and learning-to-rank features
- * All algorithms run locally in the browser — no external dependencies.
+ * 三维排序范式：
+ * 1. 页面上下文理解（这是什么类型的页面？哪些链接最重要？）
+ * 2. 链接语义理解（这个链接是什么？它和页面的关系是什么？）
+ * 3. 用户行为学习（这个用户现在在做什么？他关心什么？）
  */
 
 class RankingEngine {
     constructor() {
-        this.bm25_k1 = 1.5;
-        this.bm25_b = 0.75;
-        this.idfCache = new Map();
-        this.docFreqs = new Map();
-        this.totalDocs = 0;
-        this.avgDocLength = 0;
-        this.docLengths = [];
+        this.sessionClicks = [];          // 本次会话的点击记录
+        this.sessionDomainCounts = new Map(); // 会话内域名点击统计
     }
 
-    // ========== Tokenization ==========
+    // ====================================================================
+    // 1. 页面上下文理解
+    // ====================================================================
+
+    /**
+     * 检测页面类型，返回类型标识和该类型下的链接重要性权重
+     */
+    detectPageType(pageUrl, pageMeta) {
+        const url = (pageUrl || '').toLowerCase();
+        const title = (pageMeta?.title || '').toLowerCase();
+        const desc = (pageMeta?.description || '').toLowerCase();
+        const body = (pageMeta?.bodyText || '').substring(0, 2000).toLowerCase();
+
+        // GitHub
+        if (url.includes('github.com')) {
+            if (url.match(/github\.com\/[^/]+\/[^/]+$/)) return 'github-repo';
+            if (url.includes('/issues') || url.includes('/pull/')) return 'github-issues';
+            return 'github';
+        }
+
+        // 技术文档
+        if (url.includes('docs.') || url.includes('/docs/') || url.includes('/documentation/') ||
+            url.includes('/api/') || url.includes('/reference/') || url.includes('/handbook/')) {
+            return 'docs';
+        }
+
+        // Stack Overflow / 问答
+        if (url.includes('stackoverflow.com') || url.includes('quora.com') ||
+            url.includes('/questions/') || url.includes('/q/')) {
+            return 'qa';
+        }
+
+        // 新闻/资讯
+        if (url.includes('news') || url.includes('bbc.') || url.includes('cnn.') ||
+            url.includes('reuters.') || url.includes('/article/') || url.includes('/story/')) {
+            return 'news';
+        }
+
+        // 博客/文章
+        if (url.includes('blog') || url.includes('/post/') || url.includes('/article/') ||
+            url.includes('/p/') || body.includes('发表于') || body.includes('published')) {
+            return 'blog';
+        }
+
+        // 电商
+        if (url.includes('amazon.') || url.includes('taobao.') || url.includes('jd.') ||
+            url.includes('/product/') || url.includes('/item/')) {
+            return 'ecommerce';
+        }
+
+        // 视频
+        if (url.includes('youtube.') || url.includes('bilibili.') || url.includes('vimeo.')) {
+            return 'video';
+        }
+
+        // 论坛
+        if (url.includes('reddit.') || url.includes('/forum/') || url.includes('/thread/')) {
+            return 'forum';
+        }
+
+        // Wikipedia
+        if (url.includes('wikipedia.') || url.includes('wiki')) {
+            return 'wiki';
+        }
+
+        return 'generic';
+    }
+
+    /**
+     * 根据页面类型返回区域权重调整策略
+     */
+    getPageTypeStrategy(pageType) {
+        const strategies = {
+            'github-repo': {
+                regionBoost: { main: 10, aside: 15, nav: 5 },
+                linkBoost: { sameDomain: 20, hasCodePath: 25, hasReadme: 30 },
+                penalty: { tracking: 15 }
+            },
+            'docs': {
+                regionBoost: { main: 15, aside: 10, nav: 0 },
+                linkBoost: { sameDomain: 15, hasTutorialPath: 20, hasApiPath: 15 },
+                penalty: { tracking: 10 }
+            },
+            'blog': {
+                regionBoost: { main: 20, aside: 5, nav: -5 },
+                linkBoost: { sameDomain: 10, hasArticlePath: 15, hasYearPath: 10 },
+                penalty: { tracking: 12 }
+            },
+            'news': {
+                regionBoost: { main: 25, aside: 0, nav: -10 },
+                linkBoost: { sameDomain: 5, hasArticlePath: 20, hasYearPath: 15 },
+                penalty: { tracking: 15 }
+            },
+            'qa': {
+                regionBoost: { main: 20, aside: 5, nav: -5 },
+                linkBoost: { sameDomain: 15, hasAnswerLink: 20 },
+                penalty: { tracking: 10 }
+            },
+            'wiki': {
+                regionBoost: { main: 15, aside: 10, nav: 0 },
+                linkBoost: { sameDomain: 20, hasReferencePath: 15 },
+                penalty: { tracking: 5 }
+            },
+            'generic': {
+                regionBoost: {},
+                linkBoost: { sameDomain: 10 },
+                penalty: { tracking: 10 }
+            }
+        };
+        return strategies[pageType] || strategies.generic;
+    }
+
+    // ====================================================================
+    // 2. 链接语义理解
+    // ====================================================================
+
+    /**
+     * 分析链接的语义角色（它是干什么的？）
+     */
+    classifyLinkSemantics(link, stats) {
+        const title = (link.title || '').trim().toLowerCase();
+        const url = link.url || '';
+        const semantics = [];
+
+        // 内容链接（文章、教程、博客）
+        if (link.isContentArea) {
+            if (title.length >= 10) semantics.push('content');
+        }
+
+        // 导航链接
+        try {
+            const urlObj = new URL(url);
+            const pathParts = urlObj.pathname.split('/').filter(Boolean);
+            if (pathParts.length <= 1 && !urlObj.search) {
+                semantics.push('navigation');
+            }
+        } catch (e) {}
+
+        // 外部引用
+        if (!this._isSameDomain(url, stats.currentPageUrl)) {
+            semantics.push('external');
+        }
+
+        // 资源链接（PDF、文档等）
+        try {
+            const ext = new URL(url).pathname.split('.').pop().toLowerCase();
+            if (['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'csv', 'zip', 'tar', 'gz'].includes(ext)) {
+                semantics.push('resource');
+            }
+        } catch (e) {}
+
+        // 代码链接（GitHub、GitLab 等）
+        if (url.includes('github.com') || url.includes('gitlab.com') || url.includes('bitbucket.org')) {
+            semantics.push('code');
+        }
+
+        // 社交链接
+        if (url.match(/(twitter\.com|x\.com|facebook\.com|linkedin\.com|weibo\.com)/)) {
+            semantics.push('social');
+        }
+
+        if (semantics.length === 0) semantics.push('other');
+        return semantics;
+    }
+
+    /**
+     * 分析锚文本质量
+     */
+    anchorTextScore(link) {
+        const title = (link.title || '').trim();
+        if (!title || title.startsWith('http')) return 0;
+
+        let score = 0;
+        const words = title.split(/\s+/);
+
+        // 描述性长度：3-15 词最佳
+        if (words.length >= 3 && words.length <= 15) score += 20;
+        else if (words.length >= 2) score += 10;
+        else score -= 5;
+
+        // 字符长度：15-80 最佳
+        if (title.length >= 15 && title.length <= 80) score += 15;
+        else if (title.length >= 8) score += 8;
+
+        // 包含动词（描述性锚文本的特征）
+        const verbs = ['如何', '怎么', '使用', '安装', '配置', '创建', '构建', '实现',
+            'how', 'use', 'install', 'setup', 'create', 'build', 'implement', 'learn'];
+        if (verbs.some(v => title.toLowerCase().includes(v))) score += 10;
+
+        // 包含具体名词（非泛化文本）
+        if (/\b(api|sdk|guide|tutorial|docs?|reference|example|demo)\b/i.test(title)) score += 8;
+
+        // 导航/通用文本惩罚
+        const genericPatterns = [
+            /^(更多|more|learn more|read more|点击|click|here|这里|详情|detail|查看|link|url)$/i,
+            /^(下一页|上一页|prev|next|»|«)$/i,
+            /^(分享|share|收藏|favorite)$/i,
+            /^(广告|ad|sponsored|推广|promotion)$/i,
+        ];
+        if (genericPatterns.some(p => p.test(title))) score -= 25;
+
+        return Math.max(-20, Math.min(score, 50));
+    }
+
+    // ====================================================================
+    // 3. 用户行为学习
+    // ====================================================================
+
+    /**
+     * 记录本次会话的点击行为
+     */
+    recordSessionClick(url) {
+        const domain = this._getDomain(url);
+        if (!domain) return;
+
+        this.sessionClicks.push({ url, domain, time: Date.now() });
+        this.sessionDomainCounts.set(domain, (this.sessionDomainCounts.get(domain) || 0) + 1);
+    }
+
+    /**
+     * 分析会话行为模式
+     */
+    analyzeSessionBehavior() {
+        if (this.sessionClicks.length === 0) return { pattern: 'new', focus: null, diversity: 0 };
+
+        // 最近 30 秒的点击
+        const recent = this.sessionClicks.filter(c => Date.now() - c.time < 30000);
+        const recentDomains = new Set(recent.map(c => c.domain));
+
+        // 行为模式判断
+        let pattern = 'browse'; // 默认浏览模式
+        if (recent.length >= 3) {
+            if (recentDomains.size <= 2) {
+                pattern = 'deep-dive'; // 深度阅读：集中在少数域名
+            } else {
+                pattern = 'explore'; // 探索模式：跨多个域名
+            }
+        }
+
+        // 关注焦点：最近点击最多的域名
+        const focus = recent.length > 0 ?
+            [...this.sessionDomainCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] : null;
+
+        // 多样性：会话中不同域名的比例
+        const uniqueDomains = new Set(this.sessionClicks.map(c => c.domain)).size;
+        const diversity = this.sessionClicks.length > 0 ? uniqueDomains / this.sessionClicks.length : 0;
+
+        return { pattern, focus, diversity, recentCount: recent.length };
+    }
+
+    /**
+     * 根据会话行为动态调整分数
+     */
+    applySessionBoost(score, link, behavior) {
+        const domain = this._getDomain(link.url);
+        if (!domain) return score;
+
+        let adjustment = 0;
+
+        switch (behavior.pattern) {
+            case 'deep-dive':
+                // 深度阅读模式：优先同域名内容
+                if (domain === behavior.focus) adjustment += 20;
+                // 降低跨域链接的权重
+                if (domain !== behavior.focus) adjustment -= 10;
+                break;
+
+            case 'explore':
+                // 探索模式：优先跨域链接
+                if (domain !== behavior.focus) adjustment += 15;
+                // 降低同域名链接的权重（已经看够了）
+                if (domain === behavior.focus) adjustment -= 8;
+                break;
+
+            case 'browse':
+            default:
+                // 浏览模式：保持默认
+                break;
+        }
+
+        // 全局会话疲劳
+        const sessionClicks = this.sessionDomainCounts.get(domain) || 0;
+        if (sessionClicks >= 3) adjustment -= sessionClicks * 3;
+
+        return score + adjustment;
+    }
+
+    // ====================================================================
+    // 综合打分
+    // ====================================================================
+
+    computeScore(link, stats, userProfile, pageTypeStrategy) {
+        let score = 0;
+
+        // 1. 区域权重
+        const region = this.classifyRegion(link);
+        const regionBoost = pageTypeStrategy.regionBoost[region] || 0;
+        score += (this.REGION_WEIGHTS[region] || 60) + regionBoost;
+
+        // 2. 内容质量
+        score += this.contentQualityScore(link, stats);
+
+        // 3. 锚文本质量（新增）
+        score += this.anchorTextScore(link);
+
+        // 4. 用户兴趣匹配
+        score += this.computeInterestScore(link, userProfile);
+
+        // 5. 链接语义加分
+        const semantics = this.classifyLinkSemantics(link, stats);
+        if (semantics.includes('content')) score += 15;
+        if (semantics.includes('navigation')) score -= 5;
+        if (semantics.includes('resource')) score += 8;
+        if (semantics.includes('social')) score -= 10;
+
+        // 6. 页面类型特定加分
+        const linkBoost = pageTypeStrategy.linkBoost || {};
+        try {
+            const urlObj = new URL(link.url);
+            const path = urlObj.pathname.toLowerCase();
+            const isSameDomain = this._isSameDomain(link.url, stats.currentPageUrl);
+
+            if (linkBoost.sameDomain && isSameDomain) score += linkBoost.sameDomain;
+            if (linkBoost.hasCodePath && (path.includes('/src/') || path.includes('/lib/') || path.includes('/tree/'))) {
+                score += linkBoost.hasCodePath;
+            }
+            if (linkBoost.hasReadme && (path.includes('readme') || path.includes('CHANGELOG'))) {
+                score += linkBoost.hasReadme;
+            }
+            if (linkBoost.hasTutorialPath && /(tutorial|guide|howto|learn)/i.test(path)) {
+                score += linkBoost.hasTutorialPath;
+            }
+            if (linkBoost.hasArticlePath && /(article|post|blog|story|news)/i.test(path)) {
+                score += linkBoost.hasArticlePath;
+            }
+            if (linkBoost.hasYearPath && /20(2[0-9]|3[0-9])/.test(path)) {
+                score += (linkBoost.hasYearPath || 10);
+            }
+            if (linkBoost.hasReferencePath && /(reference|api|docs|spec)/i.test(path)) {
+                score += (linkBoost.hasReferencePath || 10);
+            }
+
+            // 追踪参数惩罚
+            const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'fbclid',
+                'gclid', 'ref', 'source', 'feature', 'si', 't'];
+            const trackingCount = Array.from(urlObj.searchParams.keys())
+                .filter(k => trackingParams.includes(k.toLowerCase())).length;
+            if (trackingCount > 0) score -= trackingCount * (pageTypeStrategy.penalty?.tracking || 8);
+        } catch (e) {}
+
+        // 7. 行为信号
+        score += this.behaviorScore(link, stats);
+
+        // 8. 新颖度
+        score += this.noveltyScore(link, stats);
+
+        // 9. 位置信号
+        score += this.positionScore(link, stats);
+
+        return { total: Math.max(0, score), region, semantics };
+    }
+
+    // ====================================================================
+    // 主排序管线
+    // ====================================================================
+
+    rank(links, stats, linkHistory) {
+        if (links.length === 0) return { ranked: [], groups: new Map(), scores: [] };
+
+        // 1. 页面上下文
+        const pageType = this.detectPageType(stats.currentPageUrl, stats.pageMeta);
+        const pageTypeStrategy = this.getPageTypeStrategy(pageType);
+
+        // 2. 用户兴趣画像
+        const userProfile = this.computeUserInterestProfile(linkHistory);
+
+        // 3. 会话行为分析
+        const sessionBehavior = this.analyzeSessionBehavior();
+
+        // 4. 逐链接打分
+        const scored = links.map(link => {
+            const { total, region, semantics } = this.computeScore(link, stats, userProfile, pageTypeStrategy);
+
+            // 会话行为调整
+            const adjustedScore = this.applySessionBoost(total, link, sessionBehavior);
+
+            return { link, total: adjustedScore, region, semantics };
+        });
+
+        // 5. 排序
+        scored.sort((a, b) => b.total - a.total);
+
+        // 6. 分组（按区域 + 语义）
+        const groups = new Map();
+        const groupOrder = ['main', 'article', 'section', 'other', 'nav', 'aside', 'header', 'footer'];
+
+        scored.forEach(item => {
+            const region = item.region;
+            if (!groups.has(region)) groups.set(region, []);
+            groups.get(region).push(item);
+        });
+
+        const sortedGroups = new Map();
+        groupOrder.forEach(region => {
+            if (groups.has(region)) sortedGroups.set(region, groups.get(region));
+        });
+
+        return {
+            ranked: scored.map(s => s.link),
+            groups: sortedGroups,
+            scores: scored,
+            pageType,
+            sessionBehavior
+        };
+    }
+
+    // ====================================================================
+    // 内容质量评分（保留核心逻辑）
+    // ====================================================================
+
+    contentQualityScore(link, stats) {
+        let score = 0;
+        const title = (link.title || '').trim();
+
+        if (title && !title.startsWith('http')) {
+            if (title.length >= 10 && title.length <= 80) score += 20;
+            else if (title.length >= 5) score += 10;
+            else score -= 10;
+
+            const words = this.tokenize(title);
+            if (words.length >= 3 && words.length <= 12) score += 12;
+        } else {
+            score -= 12;
+        }
+
+        try {
+            const urlObj = new URL(link.url);
+            const pathParts = urlObj.pathname.split('/').filter(Boolean);
+
+            if (pathParts.length >= 2 && pathParts.length <= 4) score += 12;
+            else if (pathParts.length === 1) score += 6;
+            if (!urlObj.search) score += 8;
+            if (urlObj.protocol === 'https:') score += 4;
+
+            const ext = urlObj.pathname.split('.').pop().toLowerCase();
+            if (['exe', 'apk', 'zip', 'rar'].includes(ext)) score -= 35;
+        } catch (e) {}
+
+        return Math.max(0, Math.min(score, 80));
+    }
+
+    // ====================================================================
+    // 用户兴趣画像
+    // ====================================================================
+
+    computeUserInterestProfile(history) {
+        if (!history || history.length === 0) return new Map();
+
+        const profile = new Map();
+        const totalWeight = history.reduce((sum, h) => sum + (h.clickCount || 1), 0);
+
+        history.forEach(h => {
+            const weight = (h.clickCount || 1) / totalWeight;
+            const recentBonus = this._recencyWeight(h.lastClicked);
+
+            this.tokenize(h.title || '').forEach(t => {
+                profile.set(t, (profile.get(t) || 0) + weight * recentBonus);
+            });
+
+            this.tokenize(h.domain || '').forEach(t => {
+                profile.set(t, (profile.get(t) || 0) + weight * recentBonus * 0.3);
+            });
+        });
+
+        return profile;
+    }
+
+    computeInterestScore(link, userProfile) {
+        if (userProfile.size === 0) return 0;
+
+        const tokens = this.tokenize((link.title || '').trim());
+        if (tokens.length === 0) return 0;
+
+        let score = 0;
+        const termFreq = new Map();
+        tokens.forEach(t => termFreq.set(t, (termFreq.get(t) || 0) + 1));
+
+        termFreq.forEach((tf, term) => {
+            score += (tf / tokens.length) * (userProfile.get(term) || 0);
+        });
+
+        return Math.min(score * 100, 60);
+    }
+
+    // ====================================================================
+    // 行为信号 & 新颖度 & 位置
+    // ====================================================================
+
+    behaviorScore(link, stats) {
+        let score = 0;
+        const domain = this._getDomain(link.url);
+        if (!domain) return score;
+
+        const userClicks = (stats.userDomainClicks || new Map()).get(domain) || 0;
+        if (userClicks > 0) score += Math.min(Math.log(1 + userClicks) * 6, 20);
+
+        if ((stats.userRecentDomains || new Set()).has(domain)) score += 12;
+
+        const todayClicks = this._getTodayDomainClicks(domain, stats);
+        if (todayClicks >= 5) score -= 18;
+        else if (todayClicks >= 3) score -= 10;
+
+        if (!stats.linkHistory || !stats.linkHistory.some(h => h.domain === domain)) score += 6;
+        if (!stats.linkHistory || !stats.linkHistory.some(h => h.url === link.url)) score += 4;
+
+        return score;
+    }
+
+    noveltyScore(link, stats) {
+        let score = 0;
+
+        if (!this._isSameDomain(link.url, stats.currentPageUrl)) score += 10;
+
+        const domain = this._getDomain(link.url);
+        if (domain && stats.domainCounts) {
+            const count = stats.domainCounts.get(domain) || 1;
+            if (count === 1) score += 8;
+            else if (count <= 2) score += 4;
+        }
+
+        try {
+            const ext = new URL(link.url).pathname.split('.').pop().toLowerCase();
+            if (['pdf', 'md', 'docx', 'pptx', 'xlsx', 'csv'].includes(ext)) score += 6;
+        } catch (e) {}
+
+        return score;
+    }
+
+    positionScore(link, stats) {
+        if (!stats.maxYPosition || stats.maxYPosition <= 0) return 0;
+        if (link.yPosition === undefined || link.yPosition < 0) return 0;
+        const normalizedY = link.yPosition / stats.maxYPosition;
+        return 25 * Math.exp(-3 * normalizedY);
+    }
+
+    // ====================================================================
+    // 区域分类
+    // ====================================================================
+
+    classifyRegion(link) {
+        if (link.isContentArea) return 'main';
+
+        try {
+            const urlObj = new URL(link.url);
+            const pathParts = urlObj.pathname.split('/').filter(Boolean);
+            if (pathParts.length <= 1) {
+                const contentKw = ['article', 'post', 'blog', 'news', 'tutorial',
+                    'guide', 'docs', 'read', 'paper', 'research'];
+                if (!contentKw.some(kw => urlObj.pathname.toLowerCase().includes(kw))) {
+                    return 'nav';
+                }
+            }
+        } catch (e) {}
+
+        return 'other';
+    }
+
+    // ====================================================================
+    // Tokenization & Helpers
+    // ====================================================================
 
     tokenize(text) {
         if (!text) return [];
@@ -27,374 +593,20 @@ class RankingEngine {
             .filter(w => w.length > 1 && !RankingEngine.STOP_WORDS.has(w));
     }
 
-    tokenizeWithPositions(text) {
-        const tokens = this.tokenize(text);
-        const positions = new Map();
-        tokens.forEach((token, i) => {
-            if (!positions.has(token)) positions.set(token, []);
-            positions.get(token).push(i);
-        });
-        return { tokens, positions };
-    }
-
-    // ========== TF-IDF Computation ==========
-
-    buildCorpus(documents) {
-        this.docFreqs.clear();
-        this.totalDocs = documents.length;
-        this.docLengths = [];
-        this.idfCache.clear();
-
-        const corpus = documents.map(doc => {
-            const text = (doc.title || '') + ' ' + this._extractPathTokens(doc.url);
-            const tokens = this.tokenize(text);
-            this.docLengths.push(tokens.length);
-
-            const termFreq = new Map();
-            tokens.forEach(t => termFreq.set(t, (termFreq.get(t) || 0) + 1));
-
-            termFreq.forEach((_, term) => {
-                this.docFreqs.set(term, (this.docFreqs.get(term) || 0) + 1);
-            });
-
-            return { doc, tokens, termFreq };
-        });
-
-        this.avgDocLength = this.docLengths.reduce((a, b) => a + b, 0) / (this.totalDocs || 1);
-        return corpus;
-    }
-
-    computeIDF(term) {
-        if (this.idfCache.has(term)) return this.idfCache.get(term);
-        const df = this.docFreqs.get(term) || 0;
-        const idf = Math.log((this.totalDocs - df + 0.5) / (df + 0.5) + 1);
-        this.idfCache.set(term, idf);
-        return idf;
-    }
-
-    // ========== BM25 Scoring ==========
-
-    bm25Score(queryTokens, docTermFreq, docLength) {
-        let score = 0;
-        const normFactor = 1 - this.bm25_b + this.bm25_b * (docLength / this.avgDocLength);
-
-        queryTokens.forEach(term => {
-            const tf = docTermFreq.get(term) || 0;
-            const idf = this.computeIDF(term);
-            const tfNorm = (tf * (this.bm25_k1 + 1)) / (tf + this.bm25_k1 * normFactor);
-            score += idf * tfNorm;
-        });
-
-        return score;
-    }
-
-    // ========== Cosine Similarity ==========
-
-    cosineSimilarity(vecA, vecB) {
-        let dotProduct = 0;
-        let normA = 0;
-        let normB = 0;
-
-        const allTerms = new Set([...vecA.keys(), ...vecB.keys()]);
-        allTerms.forEach(term => {
-            const a = vecA.get(term) || 0;
-            const b = vecB.get(term) || 0;
-            dotProduct += a * b;
-            normA += a * a;
-            normB += b * b;
-        });
-
-        if (normA === 0 || normB === 0) return 0;
-        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-    }
-
-    buildTFIDFVector(tokens) {
-        const vec = new Map();
-        const termFreq = new Map();
-        tokens.forEach(t => termFreq.set(t, (termFreq.get(t) || 0) + 1));
-
-        termFreq.forEach((tf, term) => {
-            const idf = this.computeIDF(term);
-            vec.set(term, tf * idf);
-        });
-        return vec;
-    }
-
-    // ========== Feature Extraction (Learning-to-Rank) ==========
-
-    extractFeatures(link, stats, index) {
-        const features = {};
-
-        // F1: Content Area Signal
-        features.contentArea = link.isContentArea ? 1 : 0;
-
-        // F2: URL Path Quality
-        try {
-            const urlObj = new URL(link.url);
-            const pathParts = urlObj.pathname.split('/').filter(Boolean);
-            features.pathDepth = pathParts.length;
-            features.isCleanUrl = urlObj.search ? 0 : 1;
-            features.isHTTPS = urlObj.protocol === 'https:' ? 1 : 0;
-
-            const pathStr = pathParts.join(' ').toLowerCase();
-            const contentKw = ['article', 'post', 'blog', 'news', 'tutorial', 'guide',
-                'docs', 'story', 'read', 'paper', 'research', 'learn', 'topic', 'wiki'];
-            features.hasContentPath = contentKw.some(kw => pathStr.includes(kw)) ? 1 : 0;
-
-            const ext = urlObj.pathname.split('.').pop().toLowerCase();
-            features.isSuspiciousExt = ['exe', 'apk', 'zip', 'rar'].includes(ext) ? 1 : 0;
-
-            const paramCount = Array.from(urlObj.searchParams.keys()).length;
-            features.paramCount = paramCount;
-
-            const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'fbclid',
-                'gclid', 'ref', 'source', 'feature', 'si', 't'];
-            features.trackingParamCount = Array.from(urlObj.searchParams.keys())
-                .filter(k => trackingParams.includes(k.toLowerCase())).length;
-        } catch (e) {
-            features.pathDepth = 0;
-            features.isCleanUrl = 0;
-            features.isHTTPS = 0;
-            features.hasContentPath = 0;
-            features.isSuspiciousExt = 0;
-            features.paramCount = 0;
-            features.trackingParamCount = 0;
-        }
-
-        // F3: Title Quality
-        const title = (link.title || '').trim();
-        features.titleLength = title.length;
-        features.hasTitle = title && !title.startsWith('http') ? 1 : 0;
-        features.titleWordCount = this.tokenize(title).length;
-
-        // F4: Position Signal (exponential decay)
-        if (stats.maxYPosition > 0 && link.yPosition !== undefined) {
-            const normalizedY = link.yPosition / stats.maxYPosition;
-            features.positionScore = Math.exp(-3 * normalizedY);
-            if (link.xPosition !== undefined) {
-                const normalizedX = link.xPosition / (link.viewportWidth || 1200);
-                features.isLeftColumn = normalizedX < 0.25 ? 1 : 0;
-            } else {
-                features.isLeftColumn = 0;
-            }
-        } else {
-            features.positionScore = 0.5;
-            features.isLeftColumn = 0;
-        }
-
-        // F5: Domain Signals
-        try {
-            const domain = new URL(link.url).hostname;
-            features.domain = domain;
-            features.isSameDomain = this._isSameDomain(link.url, stats.currentPageUrl) ? 1 : 0;
-            features.domainLinkCount = (stats.domainCounts.get(domain) || 0);
-            features.isRareDomain = features.domainLinkCount <= 2 ? 1 : 0;
-        } catch (e) {
-            features.domain = '';
-            features.isSameDomain = 0;
-            features.domainLinkCount = 0;
-            features.isRareDomain = 0;
-        }
-
-        // F6: User Behavior Signals
-        features.userClickCount = 0;
-        features.userRecentClick = 0;
-        features.daysSinceLastClick = 999;
-        features.clickFrequency = 0;
-
-        if (stats.userDomainClicks) {
-            features.userClickCount = stats.userDomainClicks.get(features.domain) || 0;
-            features.clickFrequency = stats.userTotalClicks > 0 ?
-                features.userClickCount / stats.userTotalClicks : 0;
-        }
-        if (stats.userRecentDomains) {
-            features.userRecentClick = stats.userRecentDomains.has(features.domain) ? 1 : 0;
-        }
-
-        // F7: Text Relevance (BM25 score against user history)
-        features.bm25Score = 0;
-        features.tfidfSimilarity = 0;
-
-        // F8: Novelty
-        features.isFirstVisit = (!stats.userDomainClicks || features.userClickCount === 0) ? 1 : 0;
-        features.isNewUrl = stats.linkHistory && !stats.linkHistory.some(h => h.url === link.url) ? 1 : 0;
-
-        return features;
-    }
-
-    // ========== Learned-to-Rank Scoring ==========
-
-    /**
-     * Compute final score using a linear model with hand-tuned weights
-     * (mimics what a trained LambdaMART/GradientBoosted model would learn)
-     */
-    rankScore(features, queryTokens, docTokens, stats) {
-        let score = 0;
-
-        // BM25 text relevance (the most important signal for search)
-        const bm25 = this.bm25Score(queryTokens, this._termFreqFromTokens(docTokens), docTokens.length);
-        score += bm25 * 12;
-
-        // TF-IDF cosine similarity to user interest profile
-        if (features.tfidfSimilarity > 0) {
-            score += features.tfidfSimilarity * 25;
-        }
-
-        // Content area (very strong signal)
-        score += features.contentArea * 80;
-
-        // URL quality
-        score += features.isCleanUrl * 12;
-        score += features.isHTTPS * 5;
-        score += features.hasContentPath * 20;
-        score -= features.isSuspiciousExt * 50;
-        score -= Math.min(features.trackingParamCount * 4, 16);
-
-        // Path depth: 2-4 is optimal
-        if (features.pathDepth >= 2 && features.pathDepth <= 4) score += 15;
-        else if (features.pathDepth === 1) score += 8;
-        else if (features.pathDepth > 5) score -= 5;
-
-        // Title quality
-        score += features.hasTitle * 20;
-        if (features.titleLength >= 10 && features.titleLength <= 80) score += 12;
-        if (features.titleWordCount >= 3 && features.titleWordCount <= 12) score += 8;
-        if (features.titleLength < 5) score -= 15;
-
-        // Position
-        score += features.positionScore * 30;
-        score += features.isLeftColumn * 5;
-
-        // Domain signals
-        score += features.isSameDomain * 20;
-        if (features.userClickCount > 0) {
-            score += Math.min(Math.log(1 + features.userClickCount) * 6, 25);
-        }
-        score += features.userRecentClick * 15;
-        if (features.daysSinceLastClick > 30) score -= 8;
-
-        // Fatigue penalty
-        const todayClicks = this._getTodayDomainClicks(features.domain, stats);
-        if (todayClicks >= 5) score -= 18;
-        else if (todayClicks >= 3) score -= 10;
-
-        // Novelty bonus
-        score += features.isNewUrl * 8;
-        score += features.isFirstVisit * 5;
-
-        // Domain diversity: penalize over-representation
-        if (features.domainLinkCount >= 5) score -= 10;
-
-        return score;
-    }
-
-    // ========== User Interest Profile ==========
-
-    buildUserInterestProfile(history) {
-        if (!history || history.length === 0) return new Map();
-
-        const profile = new Map();
-        const totalWeight = history.reduce((sum, h) => sum + (h.clickCount || 1), 0);
-
-        history.forEach(h => {
-            const weight = (h.clickCount || 1) / totalWeight;
-            const tokens = this.tokenize(h.title || '');
-            const recentBonus = this._recencyWeight(h.lastClicked);
-
-            tokens.forEach(t => {
-                profile.set(t, (profile.get(t) || 0) + weight * recentBonus);
-            });
-
-            // Also add domain tokens
-            const domainTokens = this.tokenize(h.domain || '');
-            domainTokens.forEach(t => {
-                profile.set(t, (profile.get(t) || 0) + weight * recentBonus * 0.5);
-            });
-        });
-
-        return profile;
-    }
-
-    computeInterestSimilarity(docTokens, userProfile) {
-        if (userProfile.size === 0 || docTokens.length === 0) return 0;
-
-        const docVec = new Map();
-        const termFreq = new Map();
-        docTokens.forEach(t => termFreq.set(t, (termFreq.get(t) || 0) + 1));
-        termFreq.forEach((tf, term) => {
-            docVec.set(term, tf / docTokens.length);
-        });
-
-        return this.cosineSimilarity(docVec, userProfile);
-    }
-
-    // ========== Full Ranking Pipeline ==========
-
-    /**
-     * Rank links using the full ML pipeline
-     * @param {Array} links - raw link objects from content script
-     * @param {Object} stats - computed link statistics
-     * @param {Array} linkHistory - user click history
-     * @returns {Array} links sorted by relevance score
-     */
-    rank(links, stats, linkHistory) {
-        if (links.length === 0) return links;
-
-        // Build corpus for BM25
-        const corpus = this.buildCorpus(links);
-
-        // Build user interest profile
-        const userProfile = this.buildUserInterestProfile(linkHistory);
-
-        // Extract features and compute scores
-        const scored = links.map((link, index) => {
-            const { tokens: docTokens } = corpus[index];
-            const features = this.extractFeatures(link, stats, index);
-
-            // Compute TF-IDF similarity to user interest
-            const docTFIDF = this.buildTFIDFVector(docTokens);
-            features.tfidfSimilarity = this.computeInterestSimilarity(docTokens, userProfile);
-
-            // Compute BM25 score against query (all user history titles as pseudo-query)
-            const queryTokens = this._buildQueryFromHistory(linkHistory);
-
-            // Compute final rank score
-            const score = this.rankScore(features, queryTokens, docTokens, stats);
-
-            return { link, score, features };
-        });
-
-        // Sort by score descending
-        scored.sort((a, b) => b.score - a.score);
-
-        return scored.map(s => s.link);
-    }
-
-    // ========== Helper Methods ==========
-
-    _extractPathTokens(url) {
-        try {
-            const urlObj = new URL(url);
-            return urlObj.pathname.split('/').filter(Boolean).join(' ') + ' ' +
-                urlObj.hostname.replace(/\./g, ' ');
-        } catch (e) {
-            return '';
-        }
+    _getDomain(url) {
+        try { return new URL(url).hostname; } catch (e) { return null; }
     }
 
     _isSameDomain(url, currentPageUrl) {
         if (!currentPageUrl) return false;
-        try {
-            return new URL(url).hostname === new URL(currentPageUrl).hostname;
-        } catch (e) {
-            return false;
-        }
+        try { return new URL(url).hostname === new URL(currentPageUrl).hostname; }
+        catch (e) { return false; }
     }
 
-    _termFreqFromTokens(tokens) {
-        const tf = new Map();
-        tokens.forEach(t => tf.set(t, (tf.get(t) || 0) + 1));
-        return tf;
+    _recencyWeight(lastClicked) {
+        if (!lastClicked) return 0.3;
+        const days = (Date.now() - lastClicked) / 86400000;
+        return Math.exp(-days / 30);
     }
 
     _getTodayDomainClicks(domain, stats) {
@@ -405,34 +617,15 @@ class RankingEngine {
             .reduce((sum, r) => sum + (r.todayCount || 0), 0);
     }
 
-    _recencyWeight(lastClicked) {
-        if (!lastClicked) return 0.3;
-        const days = (Date.now() - lastClicked) / 86400000;
-        return Math.exp(-days / 30);
-    }
-
-    _buildQueryFromHistory(history) {
-        if (!history || history.length === 0) return [];
-
-        // Build a pseudo-query from recent history (last 20 items, weighted by recency)
-        const recent = history
-            .sort((a, b) => (b.lastClicked || 0) - (a.lastClicked || 0))
-            .slice(0, 20);
-
-        const tokens = [];
-        recent.forEach(h => {
-            const weight = Math.ceil(this._recencyWeight(h.lastClicked) * 3);
-            const hTokens = this.tokenize(h.title || '');
-            for (let i = 0; i < weight; i++) {
-                tokens.push(...hTokens);
-            }
-        });
-
-        return tokens;
+    // 区域权重基准值
+    get REGION_WEIGHTS() {
+        return {
+            main: 100, article: 95, section: 80,
+            aside: 50, nav: 40, footer: 20, header: 35, other: 60
+        };
     }
 }
 
-// Chinese + English stop words
 RankingEngine.STOP_WORDS = new Set([
     'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
     'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',

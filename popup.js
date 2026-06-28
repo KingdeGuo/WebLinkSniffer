@@ -11,7 +11,7 @@ class LinkManager {
         this.hidePathPatternFiltered = true;
         this.selectedUrls = new Set();
         this.currentPage = 1;
-        this.pageSize = 5;
+        this.pageSize = 15;
         this.autoMoveOpened = true;
         this.hideOpenedLinks = true;
         this.hideBlockedLinks = true;
@@ -538,6 +538,7 @@ class LinkManager {
             if (response && response.links) {
                 this.links = response.links;
                 this.currentPageUrl = response.pageUrl || '';
+                this.pageMeta = response.pageMeta || {};
                 this.retryCount = 0;
                 if (this.links.length === 0) {
                     this.showEmpty();
@@ -619,6 +620,9 @@ class LinkManager {
     // ========== 多阶段智能排序系统 ==========
 
     sortLinks() {
+        this.rankedGroups = null;
+        this.rankedScores = null;
+
         if (this.links.length < 4) {
             this.links.sort((a, b) => a.url.localeCompare(b.url));
             return;
@@ -627,33 +631,56 @@ class LinkManager {
         const stats = this.computeLinkStatistics();
         stats.currentPageUrl = this.currentPageUrl;
         stats.linkHistory = this.linkHistory;
+        stats.pageMeta = this.pageMeta || {};
 
-        // 使用 ML 排序引擎
-        const rankedLinks = this.rankingEngine.rank(this.links, stats, this.linkHistory);
+        const result = this.rankingEngine.rank(this.links, stats, this.linkHistory);
+        this.rankedGroups = result.groups;
+        this.rankedScores = result.scores;
+        this.pageType = result.pageType;
+        this.sessionBehavior = result.sessionBehavior;
 
-        // 分离已打开和未打开
-        const unopened = rankedLinks.filter(link => !this.openedLinks.has(link.url));
-        const opened = rankedLinks.filter(link => this.openedLinks.has(link.url));
+        // 更新页面类型标签
+        this._updatePageTypeBadge(result.pageType);
 
-        // 对未打开链接做域名分散
+        // 最终排序：未打开优先，同组内按分数降序
+        const unopened = result.ranked.filter(l => !this.openedLinks.has(l.url));
+        const opened = result.ranked.filter(l => this.openedLinks.has(l.url));
+
         const dispersed = this.domainDispersion(unopened.map(link => ({
             link,
             domain: this.getDomainFromUrl(link.url) || 'unknown',
             compositeScore: 0
         }))).map(item => item.link);
 
-        // 已打开的排在最后
         this.links = [...dispersed, ...opened];
+    }
 
-        // debug 输出
-        if (window.location.hash.includes('debug')) {
-            console.table(this.links.slice(0, 15).map((link, i) => ({
-                rank: i + 1,
-                title: (link.title || '').substring(0, 40),
-                url: link.url.substring(0, 60),
-                contentArea: link.isContentArea ? '✓' : ''
-            })));
+    _updatePageTypeBadge(pageType) {
+        const PAGE_TYPE_LABELS = {
+            'github-repo': 'GitHub 仓库', 'github-issues': 'GitHub Issues', 'github': 'GitHub',
+            'docs': '技术文档', 'qa': '问答社区', 'news': '新闻资讯',
+            'blog': '博客文章', 'ecommerce': '电商', 'video': '视频',
+            'forum': '论坛', 'wiki': '百科', 'generic': '通用页面'
+        };
+        const PAGE_TYPE_ICONS = {
+            'github-repo': '💻', 'github-issues': 'ISSUES', 'github': '💻',
+            'docs': '📚', 'qa': '💬', 'news': '📰',
+            'blog': '✍️', 'ecommerce': '🛒', 'video': '🎬',
+            'forum': '🗣️', 'wiki': '📖', 'generic': '🌐'
+        };
+
+        const label = PAGE_TYPE_LABELS[pageType] || '页面';
+        const icon = PAGE_TYPE_ICONS[pageType] || '🌐';
+
+        let badge = document.getElementById('pageTypeBadge');
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.id = 'pageTypeBadge';
+            badge.className = 'page-type-badge';
+            const h1 = document.querySelector('h1');
+            if (h1) h1.parentNode.insertBefore(badge, h1.nextSibling);
         }
+        badge.textContent = `${icon} ${label}`;
     }
 
     computeNoveltyScore(link, stats) {
@@ -1561,13 +1588,60 @@ class LinkManager {
         }
 
         this.linksContainer.innerHTML = '';
-        pageLinks.forEach(link => {
-            const isOpened = this.openedLinks.has(link.url);
-            const isBlocked = this.isUrlBlocked(link.url);
-            const isSelected = this.selectedUrls.has(link.url);
-            const linkElement = this.createLinkElement(link, isOpened, isBlocked, isSelected);
-            this.linksContainer.appendChild(linkElement);
-        });
+
+        // 构建分组显示
+        if (this.rankedGroups && this.rankedGroups.size > 1) {
+            const pageUrls = new Set(pageLinks.map(l => l.url));
+            const REGION_LABELS = {
+                main: '主内容', article: '文章', section: '分区',
+                other: '其他', nav: '导航', aside: '侧边栏',
+                header: '页头', footer: '页脚'
+            };
+            const REGION_ICONS = {
+                main: '📄', article: '📰', section: '📂',
+                other: '🔗', nav: '🧭', aside: '📌',
+                header: '🔝', footer: '📋'
+            };
+
+            this.rankedGroups.forEach((groupItems, region) => {
+                const visibleItems = groupItems.filter(item => pageUrls.has(item.link.url));
+                if (visibleItems.length === 0) return;
+
+                // 区域标题
+                const header = document.createElement('div');
+                header.className = 'group-header';
+                const icon = REGION_ICONS[region] || '🔗';
+                const label = REGION_LABELS[region] || region;
+                header.innerHTML = `<span class="group-icon">${icon}</span><span class="group-label">${label}</span><span class="group-count">${visibleItems.length}</span>`;
+                this.linksContainer.appendChild(header);
+
+                // 链接列表
+                visibleItems.forEach(item => {
+                    const link = item.link;
+                    const isOpened = this.openedLinks.has(link.url);
+                    const isBlocked = this.isUrlBlocked(link.url);
+                    const isSelected = this.selectedUrls.has(link.url);
+                    const importance = this._getImportanceLevel(item.total);
+                    const el = this.createLinkElement(link, isOpened, isBlocked, isSelected, importance);
+                    this.linksContainer.appendChild(el);
+                });
+            });
+        } else {
+            // 无分组数据时（链接太少），直接渲染
+            pageLinks.forEach(link => {
+                const isOpened = this.openedLinks.has(link.url);
+                const isBlocked = this.isUrlBlocked(link.url);
+                const isSelected = this.selectedUrls.has(link.url);
+                const el = this.createLinkElement(link, isOpened, isBlocked, isSelected, 'medium');
+                this.linksContainer.appendChild(el);
+            });
+        }
+    }
+
+    _getImportanceLevel(score) {
+        if (score >= 70) return 'high';
+        if (score >= 45) return 'medium';
+        return 'low';
     }
 
     getEmptyStateHtml(totalFiltered) {
@@ -1590,7 +1664,7 @@ class LinkManager {
         return div.innerHTML;
     }
 
-    createLinkElement(link, isOpened, isBlocked, isSelected) {
+    createLinkElement(link, isOpened, isBlocked, isSelected, importance = 'medium') {
         const div = document.createElement('div');
         div.className = `link-item ${isOpened ? 'link-opened' : ''} ${isSelected ? 'selected' : ''}`;
         div.dataset.url = link.url;
@@ -1604,6 +1678,10 @@ class LinkManager {
             e.stopPropagation();
             this.toggleSelectUrl(link.url, e.target.checked);
         });
+
+        const importanceDot = document.createElement('span');
+        importanceDot.className = `importance-dot importance-${importance}`;
+        importanceDot.title = importance === 'high' ? '高相关性' : importance === 'medium' ? '中等相关性' : '低相关性';
 
         const contentDiv = document.createElement('div');
         contentDiv.className = 'link-content';
@@ -1629,6 +1707,7 @@ class LinkManager {
         });
 
         div.appendChild(checkbox);
+        div.appendChild(importanceDot);
         div.appendChild(contentDiv);
 
         const actionsDiv = document.createElement('div');
@@ -1769,7 +1848,7 @@ class LinkManager {
     async openLink(url, title) {
         try {
             await chrome.tabs.create({ url, active: false });
-            // 异步记录到历史缓存（不阻塞）
+            this.rankingEngine.recordSessionClick(url);
             this.recordLinkClicked(url, title || '').catch(err =>
                 console.error('记录链接历史失败:', err)
             );
