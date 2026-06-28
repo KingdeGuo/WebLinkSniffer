@@ -666,21 +666,16 @@ class LinkManager {
             'github-repo': '💻', 'github-issues': 'ISSUES', 'github': '💻',
             'docs': '📚', 'qa': '💬', 'news': '📰',
             'blog': '✍️', 'ecommerce': '🛒', 'video': '🎬',
-            'forum': '🗣️', 'wiki': '📖', 'generic': '🌐'
+            'forum': '🗣️', 'wiki': '📖', 'generic': ''
         };
 
-        const label = PAGE_TYPE_LABELS[pageType] || '页面';
-        const icon = PAGE_TYPE_ICONS[pageType] || '🌐';
+        const label = PAGE_TYPE_LABELS[pageType] || '';
+        const icon = PAGE_TYPE_ICONS[pageType] || '';
 
-        let badge = document.getElementById('pageTypeBadge');
-        if (!badge) {
-            badge = document.createElement('span');
-            badge.id = 'pageTypeBadge';
-            badge.className = 'page-type-badge';
-            const h1 = document.querySelector('h1');
-            if (h1) h1.parentNode.insertBefore(badge, h1.nextSibling);
+        const badge = document.getElementById('pageTypeBadge');
+        if (badge) {
+            badge.textContent = icon ? `${icon} ${label}` : label;
         }
-        badge.textContent = `${icon} ${label}`;
     }
 
     computeNoveltyScore(link, stats) {
@@ -1612,7 +1607,33 @@ class LinkManager {
                 header.className = 'group-header';
                 const icon = REGION_ICONS[region] || '🔗';
                 const label = REGION_LABELS[region] || region;
-                header.innerHTML = `<span class="group-icon">${icon}</span><span class="group-label">${label}</span><span class="group-count">${visibleItems.length}</span>`;
+
+                const iconSpan = document.createElement('span');
+                iconSpan.className = 'group-icon';
+                iconSpan.textContent = icon;
+
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'group-label';
+                labelSpan.textContent = label;
+
+                const countSpan = document.createElement('span');
+                countSpan.className = 'group-count';
+                countSpan.textContent = visibleItems.length;
+
+                const openAllBtn = document.createElement('button');
+                openAllBtn.className = 'group-open-btn';
+                openAllBtn.textContent = '全部打开';
+                openAllBtn.title = `打开所有${label}链接`;
+                const groupUrls = visibleItems.map(item => item.link.url);
+                openAllBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this._openGroupLinks(groupUrls, visibleItems.map(i => i.link));
+                });
+
+                header.appendChild(iconSpan);
+                header.appendChild(labelSpan);
+                header.appendChild(countSpan);
+                header.appendChild(openAllBtn);
                 this.linksContainer.appendChild(header);
 
                 // 链接列表
@@ -1642,6 +1663,21 @@ class LinkManager {
         if (score >= 70) return 'high';
         if (score >= 45) return 'medium';
         return 'low';
+    }
+
+    async _openGroupLinks(urls, linkObjects) {
+        const unopenedUrls = urls.filter(u => !this.openedLinks.has(u));
+        if (unopenedUrls.length === 0) {
+            this.showToast('该分组内所有链接已打开');
+            return;
+        }
+        const linksToOpen = linkObjects.filter(l => unopenedUrls.includes(l.url));
+        for (const link of linksToOpen) {
+            await this.openLink(link.url, link.title);
+        }
+        await this.batchSaveOpenedLinks(unopenedUrls, []);
+        this.showToast(`🔗 已打开 ${unopenedUrls.length} 个链接`);
+        this.updateUI();
     }
 
     getEmptyStateHtml(totalFiltered) {

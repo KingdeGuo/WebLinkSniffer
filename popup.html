@@ -7,82 +7,93 @@
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-    <div class="container">
-        <h1>网页链接</h1>
-        
-        <div class="controls">
-            <button id="refreshBtn" class="btn">刷新链接</button>
-            <button id="openAllBtn" class="btn primary">打开本页链接</button>
-            <button id="optionsBtn" class="btn">⚙️ 配置</button>
+    <div class="app">
+        <!-- 顶部栏：搜索 + 操作 -->
+        <header class="header">
+            <div class="header-top">
+                <span id="pageTypeBadge" class="badge"></span>
+                <div class="header-actions">
+                    <button id="refreshBtn" class="icon-btn" title="刷新">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    </button>
+                    <button id="optionsBtn" class="icon-btn" title="配置">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    </button>
+                    <button id="openAllBtn" class="icon-btn primary-icon" title="打开本页全部链接">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="search-wrapper">
+                <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="searchInput" class="search-input" placeholder="搜索链接..." />
+                <span id="searchClearBtn" class="search-clear">&times;</span>
+            </div>
+        </header>
+
+        <!-- 统计条 -->
+        <div class="stats-bar">
+            <div class="stat"><span class="stat-num" id="totalLinks">0</span><span class="stat-label">总计</span></div>
+            <div class="stat"><span class="stat-num stat-new" id="newLinks">0</span><span class="stat-label">新</span></div>
+            <div class="stat"><span class="stat-num stat-opened" id="openedLinks">0</span><span class="stat-label">已开</span></div>
+            <div class="stat"><span class="stat-num stat-blocked" id="blockedLinks">0</span><span class="stat-label">屏蔽</span></div>
         </div>
-        
-        <!-- 搜索框 -->
-        <div class="search-box">
-            <input type="text" id="searchInput" placeholder="🔍 搜索链接标题或URL..." />
-            <span id="searchClearBtn" class="search-clear">✕</span>
-        </div>
-        
-        <div class="stats">
-            <div class="stats-detail">
-                <span>总计: <span id="totalLinks">0</span></span>
-                <span>新链接: <span id="newLinks">0</span></span>
-                <span>已打开: <span id="openedLinks">0</span></span>
-                <span>已屏蔽: <span id="blockedLinks">0</span></span>
+
+        <!-- 批量操作栏 -->
+        <div id="bulkActionsBar" class="bulk-bar" style="display:none;">
+            <span id="selectedCount" class="bulk-count">已选 0</span>
+            <div class="bulk-btns">
+                <button id="bulkBlockBtn" class="bulk-btn danger">屏蔽</button>
+                <button id="bulkBlockDomainBtn" class="bulk-btn warn">屏蔽域名</button>
+                <button id="bulkCopyBtn" class="bulk-btn">复制</button>
+                <button id="bulkOpenBtn" class="bulk-btn accent">打开</button>
             </div>
         </div>
-        
-        <!-- 批量操作工具栏（选中链接时显示） -->
-        <div id="bulkActionsBar" class="bulk-actions-bar" style="display:none;">
-            <span id="selectedCount" class="selected-count">已选 0 项</span>
-            <div class="bulk-actions">
-                <button id="bulkBlockBtn" class="btn-sm btn-danger">🚫 批量屏蔽</button>
-                <button id="bulkBlockDomainBtn" class="btn-sm btn-warning">🌐 屏蔽域名</button>
-                <button id="bulkCopyBtn" class="btn-sm">📋 批量复制</button>
-                <button id="bulkOpenBtn" class="btn-sm btn-primary-sm">🔗 批量打开</button>
-            </div>
-        </div>
-        
-        <div id="linksContainer" class="links-container">
-            <!-- 链接列表将在这里动态生成 -->
+
+        <!-- 链接列表 -->
+        <div id="linksContainer" class="link-list">
             <div class="empty-state">正在获取链接...</div>
         </div>
-        
-        <div class="pagination">
-            <button id="prevBtn" class="btn">上一页</button>
-            <span id="pageInfo">第 1 页 / 共 1 页</span>
-            <button id="nextBtn" class="btn">下一页</button>
+
+        <!-- 分页 -->
+        <div class="pager">
+            <button id="prevBtn" class="pager-btn" disabled>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span id="pageInfo" class="pager-info">1 / 1</span>
+            <button id="nextBtn" class="pager-btn" disabled>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
         </div>
-        
-        <!-- 已屏蔽链接快捷管理 -->
-        <div id="blockedUrlsBar" class="blocked-domains-bar" style="display:none;">
-            <div class="blocked-domains-header">
-                <span>🚫 已屏蔽链接</span>
-                <button id="clearBlockedBtn" class="btn-link">清空</button>
+
+        <!-- 已屏蔽标签 -->
+        <div id="blockedUrlsBar" class="blocked-bar" style="display:none;">
+            <div class="blocked-header">
+                <span>已屏蔽</span>
+                <button id="clearBlockedBtn" class="link-btn">清空</button>
             </div>
-            <div id="blockedUrlsTags" class="blocked-domains-tags"></div>
+            <div id="blockedUrlsTags" class="blocked-tags"></div>
         </div>
-        
-        <div class="footer">
-            <div class="footer-options">
-                <label class="checkbox">
-                    <input type="checkbox" id="autoOpenCheckbox">
-                    <span>自动将已打开的链接移到末尾</span>
-                </label>
-                <label class="checkbox">
-                    <input type="checkbox" id="hideOpenedCheckbox" checked>
-                    <span>隐藏已打开的链接</span>
-                </label>
-                <label class="checkbox">
-                    <input type="checkbox" id="hideBlockedCheckbox" checked>
-                    <span>隐藏已屏蔽的链接</span>
-                </label>
-            </div>
-        </div>
+
+        <!-- 底部设置 -->
+        <footer class="footer">
+            <label class="toggle-row">
+                <input type="checkbox" id="autoOpenCheckbox" class="toggle-input">
+                <span class="toggle-label">已打开的移至末尾</span>
+            </label>
+            <label class="toggle-row">
+                <input type="checkbox" id="hideOpenedCheckbox" checked class="toggle-input">
+                <span class="toggle-label">隐藏已打开</span>
+            </label>
+            <label class="toggle-row">
+                <input type="checkbox" id="hideBlockedCheckbox" checked class="toggle-input">
+                <span class="toggle-label">隐藏已屏蔽</span>
+            </label>
+        </footer>
     </div>
-    
-    <!-- Toast 通知 -->
+
     <div id="toast" class="toast"></div>
-    
+
     <script src="ranking.js"></script>
     <script src="popup.js"></script>
 </body>
