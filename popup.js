@@ -8,6 +8,7 @@ class LinkManager {
         this.filteredPathPatterns = [];
         this.enableFilter = true;
         this.enablePathPatternFilter = true;
+        this.hidePathPatternFiltered = true;
         this.selectedUrls = new Set();
         this.currentPage = 1;
         this.pageSize = 5;
@@ -17,8 +18,10 @@ class LinkManager {
         this.searchQuery = '';
         this.retryCount = 0;
         this.maxRetries = 3;
+        this.fetchRequestId = 0;
         this.isInitialized = false;
         this.linkHistory = [];
+        this.rankingEngine = new RankingEngine();
 
         this.initElements();
         this.initializeApp();
@@ -92,7 +95,7 @@ class LinkManager {
 
     async loadSettings() {
         try {
-            const result = await chrome.storage.local.get(['autoMoveOpened', 'hideOpenedLinks', 'hideBlockedLinks', 'enableFilter', 'enablePathPatternFilter']);
+            const result = await chrome.storage.local.get(['autoMoveOpened', 'hideOpenedLinks', 'hideBlockedLinks', 'enableFilter', 'enablePathPatternFilter', 'hidePathPatternFiltered']);
             if (result.autoMoveOpened !== undefined) {
                 this.autoMoveOpened = result.autoMoveOpened;
                 this.autoOpenCheckbox.checked = this.autoMoveOpened;
@@ -110,6 +113,9 @@ class LinkManager {
             }
             if (result.enablePathPatternFilter !== undefined) {
                 this.enablePathPatternFilter = result.enablePathPatternFilter;
+            }
+            if (result.hidePathPatternFiltered !== undefined) {
+                this.hidePathPatternFiltered = result.hidePathPatternFiltered;
             }
         } catch (error) {
             console.error('加载设置失败:', error);
@@ -237,45 +243,67 @@ class LinkManager {
     computeHistoryScore(item, stats) {
         if (this.linkHistory.length === 0) return 50;
         let score = 50;
-        const link = item.link;
         const domain = item.domain;
+        const link = item.link;
         const title = (link.title || '').trim().toLowerCase();
 
-        // 1) 域名亲和力（Medium 式偏好加权）
-        const domainRecords = this.linkHistory.filter(h => h.domain === domain);
-        if (domainRecords.length > 0) {
-            const totalClicks = domainRecords.reduce((sum, r) => sum + (r.clickCount || 0), 0);
-            if (totalClicks >= 5) {
+        // 1) 域名亲和力（协同过滤：基于用户历史点击频率）
+        const domainClicks = stats.userDomainClicks.get(domain) || 0;
+        if (domainClicks > 0) {
+            // 对数衰减的亲和力分数
+            const affinityScore = Math.min(Math.log(1 + domainClicks) * 12, 30);
+            score += affinityScore;
+
+            // 最近活跃度：今天点击过的域名额外加分
+            if (stats.userRecentDomains.has(domain)) {
                 score += 15;
-                const days = this.daysSince(domainRecords.reduce((max, r) => Math.max(max, r.lastClicked || 0), 0));
-                if (days > 14) score -= 5;
-            } else if (totalClicks >= 2) {
-                score += 8;
+            }
+
+            // 衰减因子：太久没点击的域名降权
+            const domainRecords = this.linkHistory.filter(h => h.domain === domain);
+            const lastClick = Math.max(...domainRecords.map(r => r.lastClicked || 0));
+            const daysSinceClick = this.daysSince(lastClick);
+            if (daysSinceClick > 30) {
+                score -= 10;
+            } else if (daysSinceClick > 7) {
+                score -= 3;
             }
         }
 
-        // 2) 主题偏好匹配（TF-IDF 式关键词相似度）
+        // 2) 主题偏好匹配（TF-IDF 式余弦相似度）
         if (title && !title.startsWith('http')) {
             const currentWords = this.getTopicWords(title);
-            const allHistoryWords = new Map();
-            this.linkHistory.forEach(h => {
-                (h.topicWords || []).forEach(w => {
-                    allHistoryWords.set(w, (allHistoryWords.get(w) || 0) + (h.clickCount || 1));
+            if (currentWords.length > 0) {
+                // 构建用户兴趣向量（基于历史点击的标题词频）
+                const userInterestVec = new Map();
+                this.linkHistory.forEach(h => {
+                    const words = this.getTopicWords(h.title || '');
+                    const weight = Math.log(1 + (h.clickCount || 1));
+                    words.forEach(w => {
+                        userInterestVec.set(w, (userInterestVec.get(w) || 0) + weight);
+                    });
                 });
-            });
 
-            if (allHistoryWords.size > 0 && currentWords.length > 0) {
-                let matchScore = 0;
-                currentWords.forEach(w => {
-                    if (allHistoryWords.has(w)) {
-                        matchScore += Math.min(allHistoryWords.get(w), 5);
-                    }
-                });
-                score += Math.min(matchScore * 2, 18);
+                if (userInterestVec.size > 0) {
+                    // 余弦相似度
+                    let dotProduct = 0;
+                    let normA = 0;
+                    let normB = 0;
+                    currentWords.forEach(w => {
+                        const a = 1;
+                        const b = userInterestVec.get(w) || 0;
+                        dotProduct += a * b;
+                        normA += a * a;
+                        normB += b * b;
+                    });
+                    const similarity = (normA > 0 && normB > 0) ?
+                        dotProduct / (Math.sqrt(normA) * Math.sqrt(normB)) : 0;
+                    score += similarity * 30;
+                }
             }
         }
 
-        // 3) 会话连续性（YouTube 式近因加权）
+        // 3) 会话连续性（近期主题聚类）
         const today = new Date().toDateString();
         const todayHistory = this.linkHistory.filter(h => h.lastClickDate === today);
         if (todayHistory.length > 0) {
@@ -283,22 +311,22 @@ class LinkManager {
             todayHistory.forEach(h => (h.topicWords || []).forEach(w => todayTopicWords.add(w)));
             const currentWords = this.getTopicWords(title);
             const topicOverlap = currentWords.filter(w => todayTopicWords.has(w)).length;
-            if (topicOverlap >= 2) score += 8;
+            if (topicOverlap >= 2) score += 10;
         }
 
-        // 4) 疲劳惩罚（同域名今天点击过多 → 降权）
+        // 4) 疲劳惩罚（同域名今天点击过多 → 降权，防止信息茧房）
         const todayDomainClicks = this.linkHistory
             .filter(h => h.domain === domain && h.lastClickDate === today)
             .reduce((sum, r) => sum + (r.todayCount || 0), 0);
         if (todayDomainClicks >= 5) {
-            score -= 12;
+            score -= 15;
         } else if (todayDomainClicks >= 3) {
-            score -= 5;
+            score -= 8;
         }
 
-        // 5) 全局首次出现加分
+        // 5) 全局首次出现加分（探索奖励）
         if (!this.linkHistory.some(h => h.url === link.url)) {
-            score += 6;
+            score += 8;
         }
 
         return Math.max(0, Math.min(score, 100));
@@ -321,7 +349,10 @@ class LinkManager {
             await chrome.storage.local.set({
                 autoMoveOpened: this.autoMoveOpened,
                 hideOpenedLinks: this.hideOpenedLinks,
-                hideBlockedLinks: this.hideBlockedLinks
+                hideBlockedLinks: this.hideBlockedLinks,
+                enableFilter: this.enableFilter,
+                enablePathPatternFilter: this.enablePathPatternFilter,
+                hidePathPatternFiltered: this.hidePathPatternFiltered
             });
         } catch (error) {
             console.error('保存设置失败:', error);
@@ -490,6 +521,7 @@ class LinkManager {
     }
 
     async fetchLinks() {
+        const currentRequestId = ++this.fetchRequestId;
         this.showLoading();
         try {
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -502,6 +534,7 @@ class LinkManager {
                 return;
             }
             const response = await this.sendMessageWithRetry(tab.id, { action: 'getLinks' });
+            if (currentRequestId !== this.fetchRequestId) return;
             if (response && response.links) {
                 this.links = response.links;
                 this.currentPageUrl = response.pageUrl || '';
@@ -516,6 +549,7 @@ class LinkManager {
                 throw new Error('返回的链接数据无效');
             }
         } catch (error) {
+            if (currentRequestId !== this.fetchRequestId) return;
             console.error('获取链接失败:', error);
             if (this.retryCount < this.maxRetries) {
                 this.retryCount++;
@@ -523,7 +557,11 @@ class LinkManager {
                     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
                     if (tab) {
                         await this.injectContentScript(tab.id);
-                        setTimeout(() => this.fetchLinks(), 500);
+                        setTimeout(() => {
+                            if (this.fetchRequestId === currentRequestId) {
+                                this.fetchLinks();
+                            }
+                        }, 500);
                         return;
                     }
                 } catch (injectError) {
@@ -582,74 +620,38 @@ class LinkManager {
 
     sortLinks() {
         if (this.links.length < 4) {
-            // 链接太少，简单排序即可
             this.links.sort((a, b) => a.url.localeCompare(b.url));
             return;
         }
 
         const stats = this.computeLinkStatistics();
-        
-        // 阶段1：增强打分（基础分 + 历史偏好 + 新颖度 三维融合）
-        const scoredLinks = this.links.map(link => {
-            const baseScore = this.computeIntelligentScore(link, stats);
-            const domain = this.getDomainFromUrl(link.url) || 'unknown';
-            const item = { link, baseScore, domain };
+        stats.currentPageUrl = this.currentPageUrl;
+        stats.linkHistory = this.linkHistory;
 
-            const historyScore = this.computeHistoryScore(item, stats);
-            const noveltyScore = this.computeNoveltyScore(link, stats);
+        // 使用 ML 排序引擎
+        const rankedLinks = this.rankingEngine.rank(this.links, stats, this.linkHistory);
 
-            // 最终分 = 页面质量×0.50 + 历史偏好×0.35 + 探索奖励×0.15
-            const compositeScore = baseScore * 0.50 + historyScore * 0.35 + noveltyScore * 0.15;
+        // 分离已打开和未打开
+        const unopened = rankedLinks.filter(link => !this.openedLinks.has(link.url));
+        const opened = rankedLinks.filter(link => this.openedLinks.has(link.url));
 
-            return {
-                link,
-                compositeScore,
-                baseScore,
-                noveltyScore,
-                historyScore,
-                isOpened: this.openedLinks.has(link.url),
-                domain,
-                category: null
-            };
-        });
-
-        // 阶段2：三分类（core / interest / explore）
-        scoredLinks.forEach(item => {
-            item.category = this.categorizeLink(item, stats);
-        });
-
-        // 未打开的排前面
-        const unopened = scoredLinks.filter(item => !item.isOpened);
-        let opened = scoredLinks.filter(item => item.isOpened);
-
-        // 阶段3：组内按 compositeScore 降序
-        const sortByScore = (arr) => arr.sort((a, b) => b.compositeScore - a.compositeScore);
-        sortByScore(opened);
-
-        // 阶段4：多样性交错排列（针对未打开链接）
-        const interleaved = this.diversityInterleave(unopened, stats);
-
-        // 阶段5：域名分散（确保相邻项域名不同）
-        const dispersed = this.domainDispersion(interleaved);
-
-        // 阶段6：组内微扰动
-        const finalUnopened = this.microShuffleWithinGroup(dispersed);
+        // 对未打开链接做域名分散
+        const dispersed = this.domainDispersion(unopened.map(link => ({
+            link,
+            domain: this.getDomainFromUrl(link.url) || 'unknown',
+            compositeScore: 0
+        }))).map(item => item.link);
 
         // 已打开的排在最后
-        const finalOrder = [...finalUnopened, ...opened];
-        this.links = finalOrder.map(item => item.link);
+        this.links = [...dispersed, ...opened];
 
         // debug 输出
         if (window.location.hash.includes('debug')) {
-            console.table(finalOrder.slice(0, 15).map((item, i) => ({
+            console.table(this.links.slice(0, 15).map((link, i) => ({
                 rank: i + 1,
-                title: (item.link.title || '').substring(0, 40),
-                category: item.category,
-                composite: item.compositeScore.toFixed(1),
-                base: item.baseScore.toFixed(1),
-                novelty: item.noveltyScore.toFixed(1),
-                domain: item.domain,
-                opened: item.isOpened ? '✓' : ''
+                title: (link.title || '').substring(0, 40),
+                url: link.url.substring(0, 60),
+                contentArea: link.isContentArea ? '✓' : ''
             })));
         }
     }
@@ -734,38 +736,38 @@ class LinkManager {
         const link = item.link;
         const domain = item.domain;
 
-        // 高基础分 + 内容区 + 优质标题 → 核心
-        if (base >= 250 && link.isContentArea &&
-            link.title && link.title.length >= 10 && !link.title.startsWith('http')) {
+        // 核心链接：高基础分 + 内容区 + 优质标题
+        if (base >= 180 && link.isContentArea &&
+            link.title && link.title.length >= 8 && !link.title.startsWith('http')) {
             return 'core';
         }
 
         // 高基础分但标题一般 → 核心（靠内容区/位置补足）
-        if (base >= 230 && link.isContentArea) {
+        if (base >= 200 && link.isContentArea) {
             return 'core';
         }
 
         // 高新颖度 + 跨域 → 探索
-        if (novelty >= 65 && !this.isSameDomain(link.url)) {
+        if (novelty >= 60 && !this.isSameDomain(link.url)) {
             return 'explore';
         }
 
         // 中等分 + 有标题 → 兴趣
-        if (score >= 200 && link.title && link.title.length >= 5) {
+        if (score >= 120 && link.title && link.title.length >= 5) {
             return 'interest';
         }
 
         // 罕见域名 + 有一定分 → 探索
         try {
             const domainCount = stats.domainCounts.get(domain) || 1;
-            if (domainCount <= 2 && score >= 150 && !this.isSameDomain(link.url)) {
+            if (domainCount <= 2 && score >= 80 && !this.isSameDomain(link.url)) {
                 return 'explore';
             }
         } catch (e) {}
 
         // 剩下的按分数分
-        if (score >= 220) return 'interest';
-        if (score >= 150) return 'explore';
+        if (score >= 150) return 'interest';
+        if (score >= 80) return 'explore';
         return 'interest'; // 默认兴趣
     }
 
@@ -923,10 +925,17 @@ class LinkManager {
             urlPatterns: new Map(),
             totalLinks: this.links.length,
             maxDomainCount: 0,
-            uniqueWordsInTitles: new Set()
+            uniqueWordsInTitles: new Set(),
+            userDomainClicks: new Map(),
+            userTotalClicks: 0,
+            userRecentDomains: new Set(),
+            titleWordDF: new Map(),
+            totalTitleWords: 0,
+            avgTitleWords: 0
         };
 
         let totalTitleLength = 0;
+        let totalTitleWordCount = 0;
 
         this.links.forEach(link => {
             if (link.yPosition > stats.maxYPosition) {
@@ -946,8 +955,11 @@ class LinkManager {
             if (title && !title.startsWith('http')) {
                 stats.hasTitleCount++;
                 totalTitleLength += title.length;
-                title.toLowerCase().split(/\W+/).filter(w => w.length > 1).forEach(w => {
+                const words = title.toLowerCase().split(/\W+/).filter(w => w.length > 1);
+                totalTitleWordCount += words.length;
+                words.forEach(w => {
                     stats.uniqueWordsInTitles.add(w);
+                    stats.titleWordDF.set(w, (stats.titleWordDF.get(w) || 0) + 1);
                 });
             }
 
@@ -965,44 +977,161 @@ class LinkManager {
             stats.pathDepths.reduce((a, b) => a + b, 0) / stats.pathDepths.length : 0;
         stats.contentAreaRatio = stats.totalLinks > 0 ?
             stats.contentAreaLinks / stats.totalLinks : 0;
+        stats.avgTitleWords = stats.hasTitleCount > 0 ?
+            totalTitleWordCount / stats.hasTitleCount : 0;
+        stats.totalTitleWords = totalTitleWordCount;
+
+        // 用户行为特征
+        this.linkHistory.forEach(h => {
+            const clicks = h.clickCount || 1;
+            stats.userTotalClicks += clicks;
+            stats.userDomainClicks.set(h.domain, (stats.userDomainClicks.get(h.domain) || 0) + clicks);
+            if (h.lastClickDate === new Date().toDateString()) {
+                stats.userRecentDomains.add(h.domain);
+            }
+        });
 
         return stats;
     }
 
     computeIntelligentScore(link, stats) {
         let score = 0;
-        const weights = {
-            freshness: 150,
-            relevance: 100,
-            authority: 80,
-            quality: 70,
-            position: 60,
-            semantic: 50,
-            engagement: 40
-        };
 
-        if (!this.openedLinks.has(link.url)) {
-            score += weights.freshness;
-            try {
-                const domain = new URL(link.url).hostname;
-                if (stats.domainCounts.get(domain) === 1) {
-                    score += 20;
-                }
-            } catch (e) {}
+        // === 特征1: 内容区信号 (最强信号) ===
+        if (link.isContentArea) {
+            score += 120;
         }
 
-        score += this.calculateRelevanceScore(link, stats) * (weights.relevance / 100);
-        score += this.calculateAuthorityScore(link, stats) * (weights.authority / 100);
-        score += this.calculateQualityScore(link, stats) * (weights.quality / 100);
-        score += this.calculatePositionScore(link, stats) * (weights.position / 100);
-        score += this.calculateSemanticScore(link) * (weights.semantic / 100);
-        score += this.calculateEngagementScore(link) * (weights.engagement / 100);
+        // === 特征2: URL 结构质量 ===
+        try {
+            const urlObj = new URL(link.url);
+            const pathParts = urlObj.pathname.split('/').filter(Boolean);
 
+            // 路径深度：2-4层最佳（文章页），太深或太浅都减分
+            if (pathParts.length >= 2 && pathParts.length <= 4) {
+                score += 40;
+            } else if (pathParts.length === 1) {
+                score += 20;
+            } else if (pathParts.length > 5) {
+                score += 5;
+            }
+
+            // 路径语义：包含内容关键词的路径加分
+            const pathStr = pathParts.join(' ').toLowerCase();
+            const contentKeywords = ['article', 'post', 'blog', 'news', 'tutorial', 'guide',
+                'docs', 'story', 'read', 'paper', 'research', 'learn', 'topic', 'wiki'];
+            if (contentKeywords.some(kw => pathStr.includes(kw))) {
+                score += 30;
+            }
+
+            // 年份路径（时效性信号）
+            if (/(202[0-9]|203[0-9])/.test(pathStr)) {
+                score += 15;
+            }
+
+            // 干净URL（无追踪参数）加分
+            const paramCount = Array.from(urlObj.searchParams.keys()).length;
+            if (paramCount === 0) {
+                score += 20;
+            } else if (paramCount <= 2) {
+                score += 10;
+            } else {
+                const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'fbclid',
+                    'gclid', 'ref', 'source', 'feature', 'si', 't'];
+                const trackingCount = Array.from(urlObj.searchParams.keys())
+                    .filter(k => trackingParams.includes(k.toLowerCase())).length;
+                if (trackingCount > 0) score -= trackingCount * 5;
+            }
+
+            // HTTPS 加分
+            if (urlObj.protocol === 'https:') score += 8;
+
+            // 可疑扩展名减分
+            const ext = urlObj.pathname.split('.').pop().toLowerCase();
+            if (['exe', 'apk', 'zip', 'rar', 'tar', 'gz'].includes(ext)) {
+                score -= 40;
+            }
+        } catch (e) {}
+
+        // === 特征3: 标题质量 (TF-IDF 风格) ===
+        const title = (link.title || '').trim();
+        const anchorText = (link.anchorText || '').trim();
+        const bestText = title.length >= anchorText.length ? title : anchorText;
+
+        if (bestText && !bestText.startsWith('http')) {
+            const textMetrics = this.getTextQualityMetrics(bestText);
+            score += textMetrics.score * 0.8;
+
+            // TF-IDF: 词频逆文档频率
+            const words = bestText.toLowerCase().split(/\W+/).filter(w => w.length > 1);
+            if (words.length > 0 && stats.totalTitleWords > 0) {
+                let tfidfSum = 0;
+                words.forEach(w => {
+                    const tf = words.filter(x => x === w).length / words.length;
+                    const df = (stats.titleWordDF.get(w) || 0) / stats.totalLinks;
+                    const idf = df > 0 ? Math.log(1 / df) : 3;
+                    tfidfSum += tf * Math.min(idf, 4);
+                });
+                score += Math.min(tfidfSum * 15, 50);
+            }
+
+            // 标题长度惩罚（太短或太长）
+            if (bestText.length < 5) score -= 20;
+            if (bestText.length > 100) score -= 10;
+
+            // 导航/广告文本惩罚
+            const negativePatterns = [
+                /^(更多|more|learn more|read more|点击|click|here|这里|详情|detail|查看|link|url)$/i,
+                /^(下一页|上一页|prev|next|»|«|>>|<<)$/i,
+                /^(分享|share|收藏|favorite|打印|print)$/i,
+                /^(广告|ad|sponsored|推广|promotion)$/i,
+            ];
+            if (negativePatterns.some(p => p.test(bestText.trim()))) {
+                score -= 30;
+            }
+        } else {
+            // 纯URL标题，减分
+            score -= 15;
+        }
+
+        // === 特征4: 同域名信号 ===
         if (this.isSameDomain(link.url)) {
-            score += 25;
+            score += 30;
         }
 
-        return score;
+        // === 特征5: 页面位置（对数衰减） ===
+        if (stats.maxYPosition > 0 && link.yPosition !== undefined && link.yPosition >= 0) {
+            const normalizedY = link.yPosition / stats.maxYPosition;
+            // 指数衰减：前10%权重最高，快速递减
+            const positionScore = 40 * Math.exp(-3 * normalizedY);
+            score += positionScore;
+
+            // 左侧列加分（侧边栏导航常见位置）
+            if (link.xPosition !== undefined) {
+                const normalizedX = link.xPosition / (link.viewportWidth || 1200);
+                if (normalizedX < 0.25) score += 8;
+            }
+        }
+
+        // === 特征6: 用户行为信号 ===
+        try {
+            const domain = new URL(link.url).hostname;
+            const userClicks = stats.userDomainClicks.get(domain) || 0;
+
+            // 用户历史点击频率（协同过滤信号）
+            if (stats.userTotalClicks > 0) {
+                const clickRate = userClicks / stats.userTotalClicks;
+                // 对数衰减：高频域名加分但不过度
+                score += Math.min(Math.log(1 + userClicks * 2) * 8, 35);
+            }
+
+            // 今天点击过的域名（会话连续性）
+            if (stats.userRecentDomains.has(domain)) {
+                score += 20;
+            }
+        } catch (e) {}
+
+        return Math.max(0, Math.min(score, 500));
     }
 
     calculateRelevanceScore(link, stats) {
@@ -1337,7 +1466,7 @@ class LinkManager {
             const domain = this.getDomainFromUrl(url);
             if (domain && this.filteredDomains.some(d => domain === d || domain.endsWith('.' + d))) return true;
         }
-        if (this.enablePathPatternFilter && this.filteredPathPatterns.length > 0) {
+        if (this.enablePathPatternFilter && this.hidePathPatternFiltered && this.filteredPathPatterns.length > 0) {
             try {
                 const urlObj = new URL(url);
                 const pathAndQuery = urlObj.pathname + urlObj.search;
@@ -1391,17 +1520,20 @@ class LinkManager {
     }
 
     calculateStats() {
-        const totalLinks = this.links.length;
+        let totalLinks = 0;
+        let newCount = 0;
         let openedCount = 0;
         let blockedCount = 0;
         this.links.forEach(link => {
             const isBlocked = this.isUrlBlocked(link.url);
             const isOpened = this.openedLinks.has(link.url);
+            totalLinks++;
+            if (isOpened) openedCount++;
             if (isBlocked) blockedCount++;
-            if (isOpened && !isBlocked) openedCount++;
+            if (!isOpened && !isBlocked) newCount++;
         });
         this.totalLinksElement.textContent = totalLinks;
-        this.newLinksElement.textContent = Math.max(0, totalLinks - openedCount - blockedCount);
+        this.newLinksElement.textContent = newCount;
         this.openedLinksElement.textContent = openedCount;
         this.blockedLinksElement.textContent = blockedCount;
     }
