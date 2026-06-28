@@ -1,5 +1,6 @@
 class LinkManager {
     constructor() {
+        this.MAX_FILTERED = 500;
         this.links = [];
         this.openedLinks = new Set();
         this.filteredUrls = [];
@@ -321,6 +322,9 @@ class LinkManager {
 
     async saveFilteredUrls() {
         try {
+            if (this.filteredUrls.length > this.MAX_FILTERED) {
+                this.filteredUrls = this.filteredUrls.slice(-this.MAX_FILTERED);
+            }
             await chrome.storage.local.set({ filteredUrls: this.filteredUrls });
         } catch (error) {
             console.error('保存屏蔽链接失败:', error);
@@ -329,6 +333,9 @@ class LinkManager {
 
     async saveFilteredDomains() {
         try {
+            if (this.filteredDomains.length > this.MAX_FILTERED) {
+                this.filteredDomains = this.filteredDomains.slice(-this.MAX_FILTERED);
+            }
             await chrome.storage.local.set({ filteredDomains: this.filteredDomains });
         } catch (error) {
             console.error('保存屏蔽域名失败:', error);
@@ -337,6 +344,9 @@ class LinkManager {
 
     async saveFilteredPathPatterns() {
         try {
+            if (this.filteredPathPatterns.length > this.MAX_FILTERED) {
+                this.filteredPathPatterns = this.filteredPathPatterns.slice(-this.MAX_FILTERED);
+            }
             await chrome.storage.local.set({ filteredPathPatterns: this.filteredPathPatterns });
         } catch (error) {
             console.error('保存路径模式失败:', error);
@@ -442,8 +452,8 @@ class LinkManager {
             this.saveFilteredDomains().then(() => {
                 this.selectedUrls.clear();
                 this.updateBlockedUrlsBar();
+                this.removeBlockedDomainFromView(newDomains);
                 this.showToast(`🌐 已屏蔽 ${newDomains.length} 个域名`);
-                this.fetchLinks();
             });
         });
 
@@ -1305,7 +1315,7 @@ class LinkManager {
     isUrlBlocked(url) {
         if (this.filteredUrls.includes(url)) return true;
         const domain = this.getDomainFromUrl(url);
-        if (domain && this.filteredDomains.includes(domain)) return true;
+        if (domain && this.filteredDomains.some(d => domain === d || domain.endsWith('.' + d))) return true;
         if (this.filteredPathPatterns.length > 0) {
             try {
                 const urlObj = new URL(url);
@@ -1325,7 +1335,7 @@ class LinkManager {
 
     isDomainBlocked(url) {
         const domain = this.getDomainFromUrl(url);
-        return domain && this.filteredDomains.includes(domain);
+        return domain && this.filteredDomains.some(d => domain === d || domain.endsWith('.' + d));
     }
 
     extractPathPattern(url) {
@@ -1409,7 +1419,8 @@ class LinkManager {
     getEmptyStateHtml(totalFiltered) {
         if (totalFiltered === 0) {
             if (this.searchQuery) {
-                return `<div class="empty-state">没有找到匹配 "<strong>${this.searchQuery}</strong>" 的链接</div>`;
+                const safeQuery = this.escapeHtml(this.searchQuery);
+                return `<div class="empty-state">没有找到匹配 "<strong>${safeQuery}</strong>" 的链接</div>`;
             } else if (this.hideOpenedLinks || this.hideBlockedLinks) {
                 return '<div class="empty-state">所有链接已打开或已隐藏</div>';
             } else {
@@ -1417,6 +1428,12 @@ class LinkManager {
             }
         }
         return '<div class="empty-state">没有找到链接</div>';
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     createLinkElement(link, isOpened, isBlocked, isSelected) {
@@ -1599,7 +1616,9 @@ class LinkManager {
         try {
             await chrome.tabs.create({ url, active: false });
             // 异步记录到历史缓存（不阻塞）
-            this.recordLinkClicked(url, title || '');
+            this.recordLinkClicked(url, title || '').catch(err =>
+                console.error('记录链接历史失败:', err)
+            );
         } catch (error) {
             console.error('打开链接失败:', error);
         }
@@ -1678,10 +1697,13 @@ class LinkManager {
         this.updateUI();
     }
 
-    removeBlockedDomainFromView(domain) {
-        const before = this.links.length;
+    removeBlockedDomainFromView(domainOrDomains) {
+        const domains = Array.isArray(domainOrDomains) ? domainOrDomains : [domainOrDomains];
         this.links = this.links.filter(link => {
-            try { return new URL(link.url).hostname !== domain; } catch (e) { return true; }
+            try {
+                const linkDomain = new URL(link.url).hostname;
+                return !domains.some(d => linkDomain === d || linkDomain.endsWith('.' + d));
+            } catch (e) { return true; }
         });
         this.currentPage = 1;
         this.updateUI();

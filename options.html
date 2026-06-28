@@ -360,6 +360,14 @@
             <div class="section">
                 <h2 class="section-title">路径模式屏蔽</h2>
                 <p style="font-size: 14px; color: #666; margin-bottom: 10px;">屏蔽包含特定路径模式的所有链接（如 /blog/, /article/），不受域名限制</p>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="enablePathPatternFilter" checked>
+                    <label for="enablePathPatternFilter">启用路径模式过滤</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="hidePathPatternFiltered" checked>
+                    <label for="hidePathPatternFiltered">隐藏被路径模式过滤的链接（不显示在列表中）</label>
+                </div>
                 <div class="domain-list" id="pathPatternList">
                     <!-- 路径模式列表将在这里动态生成 -->
                 </div>

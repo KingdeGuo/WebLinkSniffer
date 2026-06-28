@@ -27,6 +27,8 @@ class OptionsManager {
         this.hideFiltered = true;
         this.enableKeywordFilter = false;
         this.hideKeywordFiltered = true;
+        this.enablePathPatternFilter = true;
+        this.hidePathPatternFiltered = true;
         
         this.initElements();
         this.loadSettings();
@@ -63,6 +65,8 @@ class OptionsManager {
         this.newPathPatternInput = document.getElementById('newPathPattern');
         this.addPathPatternBtn = document.getElementById('addPathPatternBtn');
         this.clearPathPatternsBtn = document.getElementById('clearPathPatternsBtn');
+        this.enablePathPatternFilterCheckbox = document.getElementById('enablePathPatternFilter');
+        this.hidePathPatternFilteredCheckbox = document.getElementById('hidePathPatternFiltered');
     }
     
     async loadSettings() {
@@ -75,7 +79,9 @@ class OptionsManager {
                 'enableFilter',
                 'hideFiltered',
                 'enableKeywordFilter',
-                'hideKeywordFiltered'
+                'hideKeywordFiltered',
+                'enablePathPatternFilter',
+                'hidePathPatternFiltered'
             ]);
             
             this.filteredDomains = result.filteredDomains || [...DEFAULT_FILTERED_DOMAINS];
@@ -86,11 +92,15 @@ class OptionsManager {
             this.hideFiltered = result.hideFiltered !== undefined ? result.hideFiltered : true;
             this.enableKeywordFilter = result.enableKeywordFilter !== undefined ? result.enableKeywordFilter : false;
             this.hideKeywordFiltered = result.hideKeywordFiltered !== undefined ? result.hideKeywordFiltered : true;
+            this.enablePathPatternFilter = result.enablePathPatternFilter !== undefined ? result.enablePathPatternFilter : true;
+            this.hidePathPatternFiltered = result.hidePathPatternFiltered !== undefined ? result.hidePathPatternFiltered : true;
             
             this.enableFilterCheckbox.checked = this.enableFilter;
             this.hideFilteredCheckbox.checked = this.hideFiltered;
             this.enableKeywordFilterCheckbox.checked = this.enableKeywordFilter;
             this.hideKeywordFilteredCheckbox.checked = this.hideKeywordFiltered;
+            this.enablePathPatternFilterCheckbox.checked = this.enablePathPatternFilter;
+            this.hidePathPatternFilteredCheckbox.checked = this.hidePathPatternFiltered;
             
             this.renderDomainList();
             this.updatePresetTags();
@@ -107,6 +117,12 @@ class OptionsManager {
     
     async saveSettings() {
         try {
+            const maxItems = 500;
+            if (this.filteredDomains.length > maxItems) this.filteredDomains = this.filteredDomains.slice(-maxItems);
+            if (this.filteredKeywords.length > maxItems) this.filteredKeywords = this.filteredKeywords.slice(-maxItems);
+            if (this.filteredUrls.length > maxItems) this.filteredUrls = this.filteredUrls.slice(-maxItems);
+            if (this.filteredPathPatterns.length > maxItems) this.filteredPathPatterns = this.filteredPathPatterns.slice(-maxItems);
+
             await chrome.storage.local.set({
                 filteredDomains: this.filteredDomains,
                 filteredKeywords: this.filteredKeywords,
@@ -115,7 +131,9 @@ class OptionsManager {
                 enableFilter: this.enableFilter,
                 hideFiltered: this.hideFiltered,
                 enableKeywordFilter: this.enableKeywordFilter,
-                hideKeywordFiltered: this.hideKeywordFiltered
+                hideKeywordFiltered: this.hideKeywordFiltered,
+                enablePathPatternFilter: this.enablePathPatternFilter,
+                hidePathPatternFiltered: this.hidePathPatternFiltered
             });
             
             this.showToast('设置已保存');
@@ -132,7 +150,9 @@ class OptionsManager {
                 enableFilter: this.enableFilter,
                 hideFiltered: this.hideFiltered,
                 enableKeywordFilter: this.enableKeywordFilter,
-                hideKeywordFiltered: this.hideKeywordFiltered
+                hideKeywordFiltered: this.hideKeywordFiltered,
+                enablePathPatternFilter: this.enablePathPatternFilter,
+                hidePathPatternFiltered: this.hidePathPatternFiltered
             });
             console.log('过滤设置已自动保存');
         } catch (error) {
@@ -202,6 +222,16 @@ class OptionsManager {
             await this.saveFilterSettings();
         });
         
+        this.enablePathPatternFilterCheckbox.addEventListener('change', async (e) => {
+            this.enablePathPatternFilter = e.target.checked;
+            await this.saveFilterSettings();
+        });
+        
+        this.hidePathPatternFilteredCheckbox.addEventListener('change', async (e) => {
+            this.hidePathPatternFiltered = e.target.checked;
+            await this.saveFilterSettings();
+        });
+        
         // 清空屏蔽链接按钮
         this.clearFilteredUrlsBtn.addEventListener('click', () => this.clearAllFilteredUrls());
         
@@ -246,6 +276,10 @@ class OptionsManager {
     
     async saveDomainsToStorage() {
         try {
+            const maxItems = 500;
+            if (this.filteredDomains.length > maxItems) {
+                this.filteredDomains = this.filteredDomains.slice(-maxItems);
+            }
             await chrome.storage.local.set({
                 filteredDomains: this.filteredDomains
             });
@@ -346,11 +380,15 @@ class OptionsManager {
             this.hideFiltered = true;
             this.enableKeywordFilter = false;
             this.hideKeywordFiltered = true;
+            this.enablePathPatternFilter = true;
+            this.hidePathPatternFiltered = true;
             
             this.enableFilterCheckbox.checked = this.enableFilter;
             this.hideFilteredCheckbox.checked = this.hideFiltered;
             this.enableKeywordFilterCheckbox.checked = this.enableKeywordFilter;
             this.hideKeywordFilteredCheckbox.checked = this.hideKeywordFiltered;
+            this.enablePathPatternFilterCheckbox.checked = this.enablePathPatternFilter;
+            this.hidePathPatternFilteredCheckbox.checked = this.hidePathPatternFiltered;
             
             this.renderDomainList();
             this.updatePresetTags();

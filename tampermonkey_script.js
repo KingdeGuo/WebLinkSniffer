@@ -448,12 +448,20 @@
         return window.innerWidth <= 768 || 'ontouchstart' in window;
     }
 
-    // GM_openInTab 封装（自动处理新标签页打开）
+    // GM_openInTab 封装（单个链接，激活新标签页）
     function openUrlInNewTab(url) {
         try {
             GM_openInTab(url, { active: true, insert: true, setParent: true });
         } catch (e) {
-            // fallback: 用 window.open
+            window.open(url, '_blank');
+        }
+    }
+
+    // 批量打开链接时不激活（避免反复切换标签页）
+    function openUrlInBackground(url) {
+        try {
+            GM_openInTab(url, { active: false, insert: true });
+        } catch (e) {
             window.open(url, '_blank');
         }
     }
@@ -1046,7 +1054,7 @@
             // 使用 GM_openInTab 不受浏览器弹窗限制
             currentPageLinks.forEach((link, index) => {
                 setTimeout(() => {
-                    openUrlInNewTab(link.url);
+                    openUrlInBackground(link.url);
                     this.markAsOpened(link.url);
                 }, index * 300);
             });
