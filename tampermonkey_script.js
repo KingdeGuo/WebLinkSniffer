@@ -255,6 +255,9 @@
                         parent = parent.parentElement;
                         depth++;
                     }
+                    if (depth >= 20 || parent === document.body || parent === document.documentElement) {
+                        isContentArea = true;
+                    }
                 } catch (e) {
                     isContentArea = false;
                 }
@@ -393,8 +396,8 @@
                     return false;
                 }
 
-                // 域名过滤（始终生效，来自 popup 一键屏蔽域名 🌐）
-                if (filteredDomains.length > 0) {
+                // 域名过滤（受 enableFilter 开关控制）
+                if (enableFilter && filteredDomains.length > 0) {
                     const urlObj = new URL(link.url);
                     const domain = urlObj.hostname.toLowerCase();
 
@@ -446,6 +449,13 @@
     // 判断是否为移动端
     function isMobile() {
         return window.innerWidth <= 768 || 'ontouchstart' in window;
+    }
+
+    // HTML 转义（防 XSS）
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     // GM_openInTab 封装（单个链接，激活新标签页）
@@ -1121,8 +1131,8 @@
                 const linkItem = document.createElement('div');
                 linkItem.className = `link-item ${this.openedLinks.has(link.url) ? 'opened' : ''}`;
                 linkItem.innerHTML = `
-                    <div class="link-title">${link.title}</div>
-                    <div class="link-url">${link.url}</div>
+                    <div class="link-title">${escapeHtml(link.title)}</div>
+                    <div class="link-url">${escapeHtml(link.url)}</div>
                     <div class="link-actions">
                         <button class="link-btn open-link" data-url="${encodeURIComponent(link.url)}">打开</button>
                         <button class="link-btn copy-link" data-url="${encodeURIComponent(link.url)}">复制</button>

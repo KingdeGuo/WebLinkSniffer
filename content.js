@@ -64,8 +64,8 @@ async function getFilteredLinks() {
                     return false;
                 }
                 
-                // 域名过滤（始终生效，来自 popup 一键屏蔽域名 🌐）
-                if (filteredDomains.length > 0) {
+                // 域名过滤（受 enableFilter 开关控制）
+                if (enableFilter && filteredDomains.length > 0) {
                     const urlObj = new URL(link.url);
                     const domain = urlObj.hostname.toLowerCase();
                     
@@ -355,9 +355,8 @@ function getAllLinks() {
                     parent = parent.parentElement;
                     depth++;
                 }
-                // 如果遍历到 body 还没找到明确标记，且不在 nav/footer/header 中，可能是内容区
                 if (depth >= 20 || parent === document.body || parent === document.documentElement) {
-                    // 如果没有明确排除标记，保守判断为非内容区
+                    isContentArea = true;
                 }
             } catch (e) {
                 isContentArea = false;

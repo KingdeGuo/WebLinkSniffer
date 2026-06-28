@@ -6,6 +6,8 @@ class LinkManager {
         this.filteredUrls = [];
         this.filteredDomains = [];
         this.filteredPathPatterns = [];
+        this.enableFilter = true;
+        this.enablePathPatternFilter = true;
         this.selectedUrls = new Set();
         this.currentPage = 1;
         this.pageSize = 5;
@@ -90,7 +92,7 @@ class LinkManager {
 
     async loadSettings() {
         try {
-            const result = await chrome.storage.local.get(['autoMoveOpened', 'hideOpenedLinks', 'hideBlockedLinks']);
+            const result = await chrome.storage.local.get(['autoMoveOpened', 'hideOpenedLinks', 'hideBlockedLinks', 'enableFilter', 'enablePathPatternFilter']);
             if (result.autoMoveOpened !== undefined) {
                 this.autoMoveOpened = result.autoMoveOpened;
                 this.autoOpenCheckbox.checked = this.autoMoveOpened;
@@ -102,6 +104,12 @@ class LinkManager {
             if (result.hideBlockedLinks !== undefined) {
                 this.hideBlockedLinks = result.hideBlockedLinks;
                 this.hideBlockedCheckbox.checked = this.hideBlockedLinks;
+            }
+            if (result.enableFilter !== undefined) {
+                this.enableFilter = result.enableFilter;
+            }
+            if (result.enablePathPatternFilter !== undefined) {
+                this.enablePathPatternFilter = result.enablePathPatternFilter;
             }
         } catch (error) {
             console.error('加载设置失败:', error);
@@ -880,9 +888,20 @@ class LinkManager {
             const swapWindow = Math.min(3, i - start + 1);
             const j = i - Math.floor(Math.random() * swapWindow);
 
-            if (i !== j && result[i].domain !== result[i - 1]?.domain &&
-                result[j].domain !== (j > 0 ? result[j - 1].domain : null)) {
-                [result[i], result[j]] = [result[j], result[i]];
+            if (i !== j) {
+                const di = result[i].domain;
+                const dj = result[j].domain;
+                const dPrevI = i > 0 ? result[i - 1].domain : null;
+                const dPrevJ = j > 0 ? result[j - 1].domain : null;
+                const dNextI = i < result.length - 1 ? result[i + 1].domain : null;
+                const dNextJ = j < result.length - 1 ? result[j + 1].domain : null;
+
+                const iCanMoveToJ = dj !== dPrevJ && di !== dNextJ;
+                const jCanMoveToI = di !== dPrevI && dj !== dNextI;
+
+                if (iCanMoveToJ && jCanMoveToI) {
+                    [result[i], result[j]] = [result[j], result[i]];
+                }
             }
         }
 
@@ -1314,9 +1333,11 @@ class LinkManager {
 
     isUrlBlocked(url) {
         if (this.filteredUrls.includes(url)) return true;
-        const domain = this.getDomainFromUrl(url);
-        if (domain && this.filteredDomains.some(d => domain === d || domain.endsWith('.' + d))) return true;
-        if (this.filteredPathPatterns.length > 0) {
+        if (this.enableFilter) {
+            const domain = this.getDomainFromUrl(url);
+            if (domain && this.filteredDomains.some(d => domain === d || domain.endsWith('.' + d))) return true;
+        }
+        if (this.enablePathPatternFilter && this.filteredPathPatterns.length > 0) {
             try {
                 const urlObj = new URL(url);
                 const pathAndQuery = urlObj.pathname + urlObj.search;
@@ -1370,30 +1391,31 @@ class LinkManager {
     }
 
     calculateStats() {
-        let blockedCount = 0;
-        this.links.forEach(link => {
-            if (this.isUrlBlocked(link.url)) blockedCount++;
-        });
         const totalLinks = this.links.length;
         let openedCount = 0;
+        let blockedCount = 0;
         this.links.forEach(link => {
-            if (this.openedLinks.has(link.url)) openedCount++;
+            const isBlocked = this.isUrlBlocked(link.url);
+            const isOpened = this.openedLinks.has(link.url);
+            if (isBlocked) blockedCount++;
+            if (isOpened && !isBlocked) openedCount++;
         });
         this.totalLinksElement.textContent = totalLinks;
-        this.newLinksElement.textContent = totalLinks - openedCount - blockedCount;
+        this.newLinksElement.textContent = Math.max(0, totalLinks - openedCount - blockedCount);
         this.openedLinksElement.textContent = openedCount;
         this.blockedLinksElement.textContent = blockedCount;
     }
 
     updateUI() {
+        const filteredLinks = this.getFilteredLinks();
         this.calculateStats();
-        this.renderLinks();
-        this.updatePagination();
+        this.renderLinks(filteredLinks);
+        this.updatePagination(filteredLinks);
         this.updateBulkActionsBar();
     }
 
-    renderLinks() {
-        const filteredLinks = this.getFilteredLinks();
+    renderLinks(preFilteredLinks) {
+        const filteredLinks = preFilteredLinks || this.getFilteredLinks();
         const totalPages = Math.ceil(filteredLinks.length / this.pageSize);
         if (this.currentPage > totalPages && totalPages > 0) this.currentPage = totalPages;
 
@@ -1577,8 +1599,8 @@ class LinkManager {
         }
     }
 
-    updatePagination() {
-        const filteredLinks = this.getFilteredLinks();
+    updatePagination(preFilteredLinks) {
+        const filteredLinks = preFilteredLinks || this.getFilteredLinks();
         const totalPages = Math.ceil(filteredLinks.length / this.pageSize);
         this.pageInfoElement.textContent = `第 ${this.currentPage} 页 / 共 ${totalPages} 页`;
         this.prevBtn.disabled = this.currentPage <= 1;
@@ -1656,6 +1678,7 @@ class LinkManager {
             return;
         }
         this.filteredUrls.push(url);
+        this.selectedUrls.delete(url);
         await this.saveFilteredUrls();
 
         if (blockBtn) {
@@ -1682,6 +1705,7 @@ class LinkManager {
             return;
         }
         this.filteredDomains.push(domain);
+        this.selectedUrls.delete(url);
         await this.saveFilteredDomains();
 
         if (btn) {
