@@ -213,60 +213,23 @@ function getDedupKey(url) {
     }
 }
 
-// 检查URL是否是图片或媒体资源
+const _imageExtensions = new Set([
+    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp',
+    '.ico', '.tiff', '.tif', '.avif', '.heic', '.heif'
+]);
+const _mediaExtensions = new Set([
+    '.mp4', '.mp3', '.avi', '.mov', '.wmv', '.flv', '.webm',
+    '.ogg', '.wav', '.m4a', '.m4v', '.mkv', '.3gp'
+]);
+const _allMediaExtensions = new Set([..._imageExtensions, ..._mediaExtensions]);
+const _mediaDirPattern = /\/(images?|img|photos?|pictures?|thumbnails?|thumb|media|assets|uploads?|static|resources?)\//i;
+
 function isMediaResource(url) {
     try {
-        const urlLower = url.toLowerCase();
-        
-        // 常见图片扩展名
-        const imageExtensions = [
-            '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp', 
-            '.ico', '.tiff', '.tif', '.avif', '.heic', '.heif'
-        ];
-        
-        // 常见媒体资源扩展名（视频、音频等）
-        const mediaExtensions = [
-            '.mp4', '.mp3', '.avi', '.mov', '.wmv', '.flv', '.webm',
-            '.ogg', '.wav', '.m4a', '.m4v', '.mkv', '.3gp'
-        ];
-        
-        // 检查是否包含图片或媒体扩展名
-        const allExtensions = [...imageExtensions, ...mediaExtensions];
-        for (const ext of allExtensions) {
-            // 检查URL路径部分是否以扩展名结尾（忽略查询参数）
-            const urlWithoutQuery = urlLower.split('?')[0];
-            if (urlWithoutQuery.endsWith(ext)) {
-                return true;
-            }
-        }
-        
-        // 检查常见的图片/媒体资源路径模式
-        const mediaPatterns = [
-            /\/images?\//i,
-            /\/img\//i,
-            /\/photos?\//i,
-            /\/pictures?\//i,
-            /\/thumbnails?\//i,
-            /\/thumb\//i,
-            /\/media\//i,
-            /\/assets\//i,
-            /\/uploads?\//i,
-            /\/static\//i,
-            /\/resources?\//i
-        ];
-        
-        // 如果URL路径包含媒体相关目录且有图片扩展名
-        for (const pattern of mediaPatterns) {
-            if (pattern.test(url)) {
-                // 进一步检查是否可能是图片文件
-                const urlWithoutQuery = urlLower.split('?')[0];
-                const hasImageExt = imageExtensions.some(ext => urlWithoutQuery.endsWith(ext));
-                if (hasImageExt) {
-                    return true;
-                }
-            }
-        }
-        
+        const pathWithoutQuery = url.toLowerCase().split('?')[0];
+        const ext = pathWithoutQuery.slice(pathWithoutQuery.lastIndexOf('.'));
+        if (_allMediaExtensions.has(ext)) return true;
+        if (_mediaDirPattern.test(url) && _imageExtensions.has(ext)) return true;
         return false;
     } catch (e) {
         return false;
